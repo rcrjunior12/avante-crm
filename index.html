@@ -3195,9 +3195,7 @@
   let resMesAtual = new Date().getMonth();
   let resAnoAtual = new Date().getFullYear();
 
-  // Default localidades and categorias
-  const DEFAULT_LOCALIDADES = ['Rio Grande do Norte','Pernambuco','Bahia'];
-  const DEFAULT_CATEGORIAS = ['Custos de Operação','Custos de Materiais','Custos de Equipamentos','Transporte'];
+
 
   let _resInitDone = false;
   function initResultados() {
@@ -3206,11 +3204,7 @@
     // Subscribe to Firestore collections
     onSnapshot(query(collection(db,'resLocalidades'),orderBy('nome')), snap=>{
       resLocalidades = snap.docs.map(d=>({id:d.id,...d.data()}));
-      // Seed defaults only once if empty
-      if (!_resSeedDone && !resLocalidades.length) {
-        _resSeedDone = true;
-        DEFAULT_LOCALIDADES.forEach(nome=>addDoc(collection(db,'resLocalidades'),{nome,criadoEm:serverTimestamp()}));
-      } else { _resSeedDone = true; }
+      _resSeedDone = true;
       renderResLocalidadeTabs();
       renderResConfig();
       popularResSelects();
@@ -3219,9 +3213,7 @@
     }, err=>console.error('resLocalidades error:', err));
     onSnapshot(query(collection(db,'resCategorias'),orderBy('nome')), snap=>{
       resCategorias = snap.docs.map(d=>({id:d.id,...d.data()}));
-      if (!resCategorias.length) {
-        DEFAULT_CATEGORIAS.forEach(nome=>addDoc(collection(db,'resCategorias'),{nome,criadoEm:serverTimestamp()}));
-      }
+
       renderResConfig();
       popularResSelects();
     });
