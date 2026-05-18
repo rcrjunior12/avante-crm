@@ -2081,7 +2081,7 @@
   // =============================================
   // MODULE NAVIGATION
   // =============================================
-  window.entrarModulo = (modulo) => {
+  window.entrarModulo = async (modulo) => {
     currentModule = modulo;
     document.getElementById('module-selector').style.display='none';
     document.getElementById('main-app').style.display='none';
@@ -2096,13 +2096,19 @@
       renderCentrosCusto(); renderFornecedores();
     } else if (modulo === 'resultados') {
       if (resApp) resApp.style.display='block';
-      // Seed default data if needed (only once)
-      if (!resLocalidades.length) {
-        DEFAULT_LOCALIDADES.forEach(nome=>addDoc(collection(db,'resLocalidades'),{nome,criadoEm:serverTimestamp()}));
-      }
-      if (!resCategorias.length) {
-        DEFAULT_CATEGORIAS.forEach(nome=>addDoc(collection(db,'resCategorias'),{nome,criadoEm:serverTimestamp()}));
-      }
+      // Seed default data if needed
+      try {
+        if (!resLocalidades.length) {
+          for (const nome of DEFAULT_LOCALIDADES) {
+            await addDoc(collection(db,'resLocalidades'),{nome,criadoEm:serverTimestamp()});
+          }
+        }
+        if (!resCategorias.length) {
+          for (const nome of DEFAULT_CATEGORIAS) {
+            await addDoc(collection(db,'resCategorias'),{nome,criadoEm:serverTimestamp()});
+          }
+        }
+      } catch(e) { console.error('Seed error:', e); }
       renderResLocalidadeTabs();
       renderResConfig();
       popularResSelects();
@@ -3211,7 +3217,7 @@
       popularResSelects();
       const rApp = document.getElementById('resultados-app');
       if (rApp && rApp.style.display==='block') renderResultados();
-    });
+    }, err=>console.error('resLocalidades error:', err));
     onSnapshot(query(collection(db,'resCategorias'),orderBy('nome')), snap=>{
       resCategorias = snap.docs.map(d=>({id:d.id,...d.data()}));
       renderResConfig();
