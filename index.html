@@ -2097,25 +2097,14 @@
       renderCentrosCusto(); renderFornecedores();
     } else if (modulo === 'resultados') {
       if (resApp) resApp.style.display='block';
-      // Seed default data if needed
-      try {
-        if (!resLocalidades.length) {
-          for (const nome of DEFAULT_LOCALIDADES) {
-            await addDoc(collection(db,'resLocalidades'),{nome,criadoEm:serverTimestamp()});
-          }
-        }
-        if (!resCategorias.length) {
-          for (const nome of DEFAULT_CATEGORIAS) {
-            await addDoc(collection(db,'resCategorias'),{nome,criadoEm:serverTimestamp()});
-          }
-        }
-      } catch(e) { console.error('Seed error:', e); }
+      // Seed handled in initResultados
       renderResLocalidadeTabs();
       renderResConfig();
       popularResSelects();
       renderResultados();
       // Show geral tab by default
       switchResTab('res-geral', document.getElementById('res-tab-geral'));
+      renderResConfig();
     }
   };
 
@@ -3202,6 +3191,7 @@
   let resCatEntradas = [];
   let resEntradas = [];
   let resSaidas = [];
+  let _resSeedDone = false;
   let resMesAtual = new Date().getMonth();
   let resAnoAtual = new Date().getFullYear();
 
@@ -3209,10 +3199,18 @@
   const DEFAULT_LOCALIDADES = ['Rio Grande do Norte','Pernambuco','Bahia'];
   const DEFAULT_CATEGORIAS = ['Custos de Operação','Custos de Materiais','Custos de Equipamentos','Transporte'];
 
+  let _resInitDone = false;
   function initResultados() {
+    if (_resInitDone) return;
+    _resInitDone = true;
     // Subscribe to Firestore collections
     onSnapshot(query(collection(db,'resLocalidades'),orderBy('nome')), snap=>{
       resLocalidades = snap.docs.map(d=>({id:d.id,...d.data()}));
+      // Seed defaults only once if empty
+      if (!_resSeedDone && !resLocalidades.length) {
+        _resSeedDone = true;
+        DEFAULT_LOCALIDADES.forEach(nome=>addDoc(collection(db,'resLocalidades'),{nome,criadoEm:serverTimestamp()}));
+      } else { _resSeedDone = true; }
       renderResLocalidadeTabs();
       renderResConfig();
       popularResSelects();
@@ -3221,6 +3219,9 @@
     }, err=>console.error('resLocalidades error:', err));
     onSnapshot(query(collection(db,'resCategorias'),orderBy('nome')), snap=>{
       resCategorias = snap.docs.map(d=>({id:d.id,...d.data()}));
+      if (!resCategorias.length) {
+        DEFAULT_CATEGORIAS.forEach(nome=>addDoc(collection(db,'resCategorias'),{nome,criadoEm:serverTimestamp()}));
+      }
       renderResConfig();
       popularResSelects();
     });
@@ -3381,13 +3382,7 @@
   function renderResLocalidadeTabs() {
     const tabsEl = document.getElementById('res-localidade-tabs');
     if (!tabsEl) return;
-    tabsEl.innerHTML = resLocalidades.map(loc=>`
-      <button class="tab" data-tab="res-loc-${loc.id}" onclick="switchResTab('res-loc-${loc.id}',this)">📍 ${loc.nome}</button>`).join('');
-    // Restore active tab after tabs re-render
-    if (_activeResTab) {
-      const activeBtn = document.querySelector(`#resultados-app .tab[data-tab="${_activeResTab}"]`);
-      if (activeBtn) activeBtn.classList.add('active');
-    }
+    // No localidade tabs - navigation is via Geral only
   }
 
   function renderResConfig() {
@@ -5135,7 +5130,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
   <div class="tabs">
     <button class="tab active" id="res-tab-geral" onclick="switchResTab('res-geral',this)">📊 Geral</button>
-    <div id="res-localidade-tabs" style="display:contents"></div>
     <button class="tab" id="res-tab-config" onclick="switchResTab('res-config',this)">⚙️ Configurações</button>
   </div>
 
