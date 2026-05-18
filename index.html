@@ -3472,7 +3472,7 @@
     const localidade = document.getElementById('entrada-localidade').value;
     const categoria = document.getElementById('entrada-categoria').value;
     const obs = document.getElementById('entrada-obs').value.trim();
-    if (!desc||!valor||!data||!localidade) { showToast('Preencha todos os campos obrigatórios.'); return; }
+    if (!valor||!data||!localidade) { showToast('Preencha todos os campos obrigatórios.'); return; }
     const dados = { descricao:desc, valor, data, localidade, categoria, obs, criadoEm:serverTimestamp() };
     const id = document.getElementById('entrada-id').value;
     if (id) await updateDoc(doc(db,'resEntradas',id), dados);
@@ -3507,7 +3507,7 @@
     const localidade = document.getElementById('saida-localidade').value;
     const categoria = document.getElementById('saida-categoria').value;
     const obs = document.getElementById('saida-obs').value.trim();
-    if (!desc||!valor||!data||!localidade||!categoria) { showToast('Preencha todos os campos obrigatórios.'); return; }
+    if (!valor||!data||!localidade||!categoria) { showToast('Preencha todos os campos obrigatórios.'); return; }
     const dados = { descricao:desc, valor, data, localidade, categoria, obs, criadoEm:serverTimestamp() };
     const id = document.getElementById('saida-id').value;
     if (id) await updateDoc(doc(db,'resSaidas',id), dados);
@@ -5176,9 +5176,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="mh"><div class="mt">💰 Nova entrada</div><button class="mc" onclick="closeModal('modal-entrada')">×</button></div>
     <div class="fg">
       <input type="hidden" id="entrada-id">
-      <div class="fgf"><label class="fl">Descrição *</label><input id="entrada-desc" type="text" placeholder="Ex: Faturamento projeto X"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div><label class="fl">Valor (R$) *</label><input id="entrada-valor" type="text" inputmode="numeric" placeholder="0,00"></div>
+      <input type="hidden" id="entrada-desc" value="Entrada">
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px">
+        <div><label class="fl">Valor (R$) *</label><input id="entrada-valor" type="text" inputmode="numeric" placeholder="0,00" style="font-size:22px;font-weight:700;padding:10px 12px"></div>
         <div><label class="fl">Data *</label><input id="entrada-data" type="date"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -5197,9 +5197,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="mh"><div class="mt">💸 Nova saída</div><button class="mc" onclick="closeModal('modal-saida')">×</button></div>
     <div class="fg">
       <input type="hidden" id="saida-id">
-      <div class="fgf"><label class="fl">Descrição *</label><input id="saida-desc" type="text" placeholder="Ex: Aluguel de equipamento"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div><label class="fl">Valor (R$) *</label><input id="saida-valor" type="text" inputmode="numeric" placeholder="0,00"></div>
+      <input type="hidden" id="saida-desc" value="Saída">
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px">
+        <div><label class="fl">Valor (R$) *</label><input id="saida-valor" type="text" inputmode="numeric" placeholder="0,00" style="font-size:22px;font-weight:700;padding:10px 12px"></div>
         <div><label class="fl">Data *</label><input id="saida-data" type="date"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
