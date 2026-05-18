@@ -2096,6 +2096,13 @@
       renderCentrosCusto(); renderFornecedores();
     } else if (modulo === 'resultados') {
       if (resApp) resApp.style.display='block';
+      // Seed default data if needed (only once)
+      if (!resLocalidades.length) {
+        DEFAULT_LOCALIDADES.forEach(nome=>addDoc(collection(db,'resLocalidades'),{nome,criadoEm:serverTimestamp()}));
+      }
+      if (!resCategorias.length) {
+        DEFAULT_CATEGORIAS.forEach(nome=>addDoc(collection(db,'resCategorias'),{nome,criadoEm:serverTimestamp()}));
+      }
       renderResLocalidadeTabs();
       renderResConfig();
       popularResSelects();
@@ -3199,10 +3206,6 @@
     // Subscribe to Firestore collections
     onSnapshot(query(collection(db,'resLocalidades'),orderBy('nome')), snap=>{
       resLocalidades = snap.docs.map(d=>({id:d.id,...d.data()}));
-      // Seed defaults if empty
-      if (!resLocalidades.length) {
-        DEFAULT_LOCALIDADES.forEach(nome=>addDoc(collection(db,'resLocalidades'),{nome,criadoEm:serverTimestamp()}));
-      }
       renderResLocalidadeTabs();
       renderResConfig();
       popularResSelects();
@@ -3211,9 +3214,6 @@
     });
     onSnapshot(query(collection(db,'resCategorias'),orderBy('nome')), snap=>{
       resCategorias = snap.docs.map(d=>({id:d.id,...d.data()}));
-      if (!resCategorias.length) {
-        DEFAULT_CATEGORIAS.forEach(nome=>addDoc(collection(db,'resCategorias'),{nome,criadoEm:serverTimestamp()}));
-      }
       renderResConfig();
       popularResSelects();
     });
@@ -3551,6 +3551,8 @@
     else await addDoc(collection(db,'resLocalidades'),{nome,criadoEm:serverTimestamp()});
     closeModal('modal-localidade');
     showToast(id?'Localidade atualizada!':'Localidade cadastrada!');
+    renderResConfig();
+    renderResLocalidadeTabs();
   };
   window.excluirLocalidade = async (id) => {
     if (!confirm('Excluir esta localidade?')) return;
@@ -3581,6 +3583,7 @@
     else await addDoc(collection(db,'resCategorias'),{nome,criadoEm:serverTimestamp()});
     closeModal('modal-categoria');
     showToast(id?'Categoria atualizada!':'Categoria cadastrada!');
+    renderResConfig();
   };
   window.excluirCategoria = async (id) => {
     if (!confirm('Excluir esta categoria?')) return;
@@ -3611,6 +3614,7 @@
     else await addDoc(collection(db,'resCatEntradas'),{nome,criadoEm:serverTimestamp()});
     closeModal('modal-cat-entrada');
     showToast(id?'Categoria atualizada!':'Categoria cadastrada!');
+    renderResConfig();
   };
   window.excluirCatEntrada = async (id) => {
     if (!confirm('Excluir esta categoria?')) return;
