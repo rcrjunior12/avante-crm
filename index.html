@@ -189,7 +189,8 @@
 
   // ---- VALOR MASK ----
   function applyValorMask(el) {
-    if (!el) return;
+    if (!el || el._maskApplied) return;
+    el._maskApplied = true;
     el.addEventListener('input', function() {
       let v = this.value.replace(/\D/g,'');
       if (!v) { this.value=''; return; }
@@ -3466,7 +3467,8 @@
     if (locId) document.getElementById('entrada-localidade').value = locId;
     document.getElementById('entrada-categoria').value = '';
     document.getElementById('modal-entrada').classList.add('open');
-    setTimeout(()=>document.getElementById('entrada-desc').focus(),100);
+    applyValorMask(document.getElementById('entrada-valor'));
+    setTimeout(()=>document.getElementById('entrada-valor').focus(),100);
   };
 
   window.salvarEntrada = async () => {
@@ -3501,7 +3503,8 @@
     popularResSelects();
     if (locId) document.getElementById('saida-localidade').value = locId;
     document.getElementById('modal-saida').classList.add('open');
-    setTimeout(()=>document.getElementById('saida-desc').focus(),100);
+    applyValorMask(document.getElementById('saida-valor'));
+    setTimeout(()=>document.getElementById('saida-valor').focus(),100);
   };
 
   window.salvarSaida = async () => {
@@ -5182,7 +5185,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <input type="hidden" id="entrada-id">
       <input type="hidden" id="entrada-desc" value="Entrada">
       <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px">
-        <div><label class="fl">Valor (R$) *</label><input id="entrada-valor" type="text" inputmode="numeric" placeholder="0,00" style="font-size:18px;font-weight:700;padding:10px 12px;letter-spacing:.02em;width:100%;box-sizing:border-box"></div>
+        <div><label class="fl">Valor (R$) *</label><input id="entrada-valor" type="text" inputmode="numeric" placeholder="0,00" style="font-size:16px;font-weight:600;padding:10px 12px;width:100%;box-sizing:border-box"></div>
         <div><label class="fl">Data *</label><input id="entrada-data" type="date"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -5203,7 +5206,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <input type="hidden" id="saida-id">
       <input type="hidden" id="saida-desc" value="Saída">
       <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px">
-        <div><label class="fl">Valor (R$) *</label><input id="saida-valor" type="text" inputmode="numeric" placeholder="0,00" style="font-size:18px;font-weight:700;padding:10px 12px;letter-spacing:.02em;width:100%;box-sizing:border-box"></div>
+        <div><label class="fl">Valor (R$) *</label><input id="saida-valor" type="text" inputmode="numeric" placeholder="0,00" style="font-size:16px;font-weight:600;padding:10px 12px;width:100%;box-sizing:border-box"></div>
         <div><label class="fl">Data *</label><input id="saida-data" type="date"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
