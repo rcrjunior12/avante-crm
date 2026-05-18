@@ -133,6 +133,7 @@
   }
 
   function subscribeAll() {
+    initResultados();
     let _archiveChecked = false;
     unsubPropostas = onSnapshot(query(collection(db,'propostas'),orderBy('criadoEm','desc')), snap=>{
       propostas=snap.docs.map(d=>({id:d.id,...d.data()}));
