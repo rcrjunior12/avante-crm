@@ -3364,6 +3364,11 @@
       renderResLista('res-ent-'+loc.id, entMes, 'entrada', loc.id);
       renderResLista('res-sai-'+loc.id, saiMes, 'saida', loc.id);
     });
+    // Restore active panel after rebuild
+    if (_activeResTab) {
+      const activePanel = document.getElementById(_activeResTab);
+      if (activePanel) activePanel.style.display='block';
+    }
   }
 
   function renderResLocalidadeTabs() {
@@ -3371,6 +3376,11 @@
     if (!tabsEl) return;
     tabsEl.innerHTML = resLocalidades.map(loc=>`
       <button class="tab" data-tab="res-loc-${loc.id}" onclick="switchResTab('res-loc-${loc.id}',this)">📍 ${loc.nome}</button>`).join('');
+    // Restore active tab after tabs re-render
+    if (_activeResTab) {
+      const activeBtn = document.querySelector(`#resultados-app .tab[data-tab="${_activeResTab}"]`);
+      if (activeBtn) activeBtn.classList.add('active');
+    }
   }
 
   function renderResConfig() {
@@ -3419,7 +3429,9 @@
     }
   }
 
+  let _activeResTab = 'res-geral';
   window.switchResTab = (tabId, btn) => {
+    _activeResTab = tabId;
     // Hide all res panels - geral, config and dynamic localidade panels
     ['res-geral','res-config'].forEach(id=>{
       const el=document.getElementById(id);
@@ -3431,6 +3443,11 @@
     const panel = document.getElementById(tabId);
     if (panel) panel.style.display='block';
     if (btn) btn.classList.add('active');
+    else {
+      // Find and activate the matching tab button
+      const matchBtn = document.querySelector(`#resultados-app .tab[data-tab="${tabId}"]`);
+      if (matchBtn) matchBtn.classList.add('active');
+    }
   };
 
   window.mudarMesRes = (dir) => {
