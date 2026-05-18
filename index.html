@@ -66,6 +66,13 @@
       if (badge) { badge.textContent = currentUserRole === 'admin' ? 'ADM' : 'OPERADOR'; }
       const mbadge = document.getElementById('module-role-badge');
       if (mbadge) { mbadge.textContent = currentUserRole === 'admin' ? 'ADM' : 'OPERADOR'; }
+      // Show Resultados card only for ADM
+      const resCard = document.getElementById('ms-card-resultados');
+      if (resCard) {
+        resCard.style.display = currentUserRole === 'admin' ? 'flex' : 'none';
+        const msCards = resCard.closest('.ms-cards');
+        if (msCards && currentUserRole === 'admin') msCards.classList.add('has-three');
+      }
       subscribeAll();
     } else {
       document.getElementById('login-screen').style.display='flex';
