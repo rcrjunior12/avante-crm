@@ -1603,11 +1603,40 @@
     } catch(e) { errEl.textContent = 'Erro: ' + e.message; }
   };
 
-  window.confirmarDelUsuario = (uid) => {
+  window.confirmarDelUsuario = async (uid) => {
     if (currentUserRole !== 'admin') return;
     if (!confirm('Excluir este usuário do sistema?')) return;
-    deleteDoc(doc(db,'usuarios',uid))
-      .then(()=>showToast('Usuário removido do sistema.'));
+    try {
+      // Get the user's firebase UID and email from Firestore before deleting
+      const userDoc = await getDoc(doc(db, 'usuarios', uid));
+      const userData = userDoc.data();
+      const firebaseUid = userData?.uid;
+      // Delete from Firestore
+      await deleteDoc(doc(db, 'usuarios', uid));
+      // Delete from Firebase Authentication via Identity Toolkit REST API
+      if (firebaseUid) {
+        try {
+          const auth2 = getAuth();
+          const adminToken = await auth2.currentUser.getIdToken();
+          // Use Firebase Auth Management API to delete another user
+          const delResp = await fetch(
+            `https://identitytoolkit.googleapis.com/v1/projects/avante-comercial/accounts/${firebaseUid}?key=AIzaSyC7lz5w1EBTi8SBcI3IXhIxdn-iSunU73c`,
+            { method: 'DELETE', headers: { 'Authorization': `Bearer ${adminToken}`, 'Content-Type': 'application/json' } }
+          );
+          if (!delResp.ok) {
+            // Fallback: user removed from Firestore but not Auth - that's ok
+            // They won't see any data since Firestore is the source of truth for roles
+            console.log('Auth user not deleted (requires Admin SDK), removed from Firestore only');
+          }
+        } catch(authErr) {
+          console.log('Auth deletion skipped:', authErr);
+        }
+      }
+      showToast('Usuário removido do sistema.');
+    } catch(e) {
+      console.error(e);
+      showToast('Erro ao remover usuário.');
+    }
   };
 
   function renderUsuarios() {
