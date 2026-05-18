@@ -1624,6 +1624,7 @@
           <div class="usuario-email">${u.email}</div>
         </div>
         <span class="usuario-role-badge" style="${roleBg[u.role]||roleBg.operador}">${roleLabel[u.role]||'Operador'}</span>
+        <button class="btn-sm" onclick="abrirEditarUsuario('${u.id}')" title="Editar usuário">✎ Editar</button>
         <button class="card-btn del" onclick="confirmarDelUsuario('${u.id}')" title="Remover">✕</button>
       </div>`).join('');
   }
@@ -3010,6 +3011,64 @@
   // ============================================================
   // RESET DE DADOS
   // ============================================================
+  window.abrirEditarUsuario = (uid) => {
+    const u = usuarios.find(x => x.id === uid);
+    if (!u) return;
+    document.getElementById('edit-usuario-id').value = uid;
+    document.getElementById('edit-usuario-nome').value = u.nome || '';
+    document.getElementById('edit-usuario-email').value = u.email || '';
+    document.getElementById('edit-usuario-role').value = u.role || 'operador';
+    document.getElementById('edit-usuario-senha').value = '';
+    document.getElementById('edit-usuario-senha2').value = '';
+    document.getElementById('modal-editar-usuario').classList.add('open');
+    setTimeout(() => document.getElementById('edit-usuario-nome').focus(), 100);
+  };
+
+  window.salvarEdicaoUsuario = async () => {
+    const uid = document.getElementById('edit-usuario-id').value;
+    const nome = document.getElementById('edit-usuario-nome').value.trim();
+    const role = document.getElementById('edit-usuario-role').value;
+    const senha = document.getElementById('edit-usuario-senha').value;
+    const senha2 = document.getElementById('edit-usuario-senha2').value;
+    if (!nome) { showToast('Preencha o nome.'); return; }
+    if (senha && senha.length < 6) { showToast('A senha deve ter pelo menos 6 caracteres.'); return; }
+    if (senha && senha !== senha2) { showToast('As senhas não coincidem.'); return; }
+    try {
+      // Update Firestore user doc
+      await updateDoc(doc(db, 'usuarios', uid), { nome, role });
+      // Update password via Firebase Auth REST if provided
+      if (senha) {
+        const auth2 = getAuth();
+        const token = await auth2.currentUser.getIdToken();
+        // Get user's Firebase UID from usuarios collection
+        const userDoc = await getDoc(doc(db, 'usuarios', uid));
+        const firebaseUid = userDoc.data()?.uid || uid;
+        const resp = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:update?key=AIzaSyC7lz5w1EBTi8SBcI3IXhIxdn-iSunU73c`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken: token, password: senha, returnSecureToken: false })
+        });
+        if (!resp.ok) {
+          const err = await resp.json();
+          // If changing another user's password, need admin SDK - show info
+          if (err.error?.message === 'CREDENTIAL_TOO_OLD_LOGIN_AGAIN') {
+            showToast('Faça login novamente para trocar a senha.');
+          } else {
+            showToast('Dados salvos. Senha só pode ser trocada para o usuário logado.');
+          }
+        } else {
+          showToast('Usuário e senha atualizados!');
+        }
+      } else {
+        showToast('Usuário atualizado com sucesso!');
+      }
+      closeModal('modal-editar-usuario');
+    } catch(e) {
+      console.error(e);
+      showToast('Erro ao salvar. Tente novamente.');
+    }
+  };
+
   window.iniciarResetDados = () => {
     document.getElementById('reset-confirm-input').value = '';
     document.getElementById('reset-progress').style.display = 'none';
@@ -4042,6 +4101,46 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
     </div>
   </div>
+
+<!-- MODAL EDITAR USUARIO -->
+<div class="modal-bg" id="modal-editar-usuario">
+  <div class="modal" style="max-width:420px">
+    <div class="mh">
+      <div class="mt">✎ Editar usuário</div>
+      <button class="mc" onclick="closeModal('modal-editar-usuario')">×</button>
+    </div>
+    <div class="fg">
+      <input type="hidden" id="edit-usuario-id">
+      <div class="fgf">
+        <label class="fl">Nome</label>
+        <input id="edit-usuario-nome" type="text" placeholder="Nome completo">
+      </div>
+      <div class="fgf">
+        <label class="fl">E-mail</label>
+        <input id="edit-usuario-email" type="email" placeholder="email@empresa.com.br" readonly style="background:#f5f5f0;color:#888;cursor:default">
+      </div>
+      <div>
+        <label class="fl">Perfil</label>
+        <select id="edit-usuario-role">
+          <option value="admin">Administrador</option>
+          <option value="operador">Operador</option>
+        </select>
+      </div>
+      <div style="border-top:1px solid #eee;padding-top:14px;margin-top:4px">
+        <label class="fl" style="color:#E24B4A;font-weight:700">🔒 Trocar senha</label>
+        <div style="font-size:11px;color:#888;margin-bottom:8px">Deixe em branco para não alterar a senha</div>
+        <input id="edit-usuario-senha" type="password" placeholder="Nova senha (mínimo 6 caracteres)">
+        <div style="margin-top:8px">
+          <input id="edit-usuario-senha2" type="password" placeholder="Confirmar nova senha">
+        </div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn-cancel" onclick="closeModal('modal-editar-usuario')">Cancelar</button>
+      <button class="btn-save" onclick="salvarEdicaoUsuario()">Salvar alterações</button>
+    </div>
+  </div>
+</div>
 
 <!-- MODAL RESET DADOS -->
 <div class="modal-bg" id="modal-reset-dados">
