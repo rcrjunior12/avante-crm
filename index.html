@@ -2074,22 +2074,29 @@
   window.entrarModulo = (modulo) => {
     currentModule = modulo;
     document.getElementById('module-selector').style.display='none';
+    document.getElementById('main-app').style.display='none';
+    document.getElementById('compras-app').style.display='none';
+    const resApp = document.getElementById('resultados-app');
+    if (resApp) resApp.style.display='none';
     if (modulo === 'propostas') {
       document.getElementById('main-app').style.display='block';
-      document.getElementById('compras-app').style.display='none';
       renderKanban(); renderAlertas();
-    } else {
+    } else if (modulo === 'compras') {
       document.getElementById('compras-app').style.display='block';
-      document.getElementById('main-app').style.display='none';
       renderCentrosCusto(); renderFornecedores();
+    } else if (modulo === 'resultados') {
+      if (resApp) resApp.style.display='block';
+      renderResultados();
     }
   };
 
   window.voltarModulos = () => {
     document.getElementById('main-app').style.display='none';
     document.getElementById('compras-app').style.display='none';
+    const resApp = document.getElementById('resultados-app');
+    if (resApp) resApp.style.display='none';
     document.getElementById('module-selector').style.display='flex';
-  };
+  };;
 
   window.showComprasPanel = (name, el) => {
     document.querySelectorAll('#compras-app .panel').forEach(p=>p.classList.remove('active'));
@@ -3158,6 +3165,344 @@
     }, 2000);
   };
 
+  // ============================================================
+  // MÓDULO RESULTADOS
+  // ============================================================
+  let resLocalidades = [];
+  let resCategorias = [];
+  let resEntradas = [];
+  let resSaidas = [];
+  let resMesAtual = new Date().getMonth();
+  let resAnoAtual = new Date().getFullYear();
+
+  // Default localidades and categorias
+  const DEFAULT_LOCALIDADES = ['Rio Grande do Norte','Pernambuco','Bahia'];
+  const DEFAULT_CATEGORIAS = ['Custos de Operação','Custos de Materiais','Custos de Equipamentos','Transporte'];
+
+  function initResultados() {
+    // Subscribe to Firestore collections
+    onSnapshot(query(collection(db,'resLocalidades'),orderBy('nome')), snap=>{
+      resLocalidades = snap.docs.map(d=>({id:d.id,...d.data()}));
+      // Seed defaults if empty
+      if (!resLocalidades.length) {
+        DEFAULT_LOCALIDADES.forEach(nome=>addDoc(collection(db,'resLocalidades'),{nome,criadoEm:serverTimestamp()}));
+      }
+      renderResLocalidadeTabs();
+      renderResConfig();
+      popularResSelects();
+      if (document.getElementById('resultados-app')?.style.display==='block') renderResultados();
+    });
+    onSnapshot(query(collection(db,'resCategorias'),orderBy('nome')), snap=>{
+      resCategorias = snap.docs.map(d=>({id:d.id,...d.data()}));
+      if (!resCategorias.length) {
+        DEFAULT_CATEGORIAS.forEach(nome=>addDoc(collection(db,'resCategorias'),{nome,criadoEm:serverTimestamp()}));
+      }
+      renderResConfig();
+      popularResSelects();
+    });
+    onSnapshot(query(collection(db,'resEntradas'),orderBy('data','desc')), snap=>{
+      resEntradas = snap.docs.map(d=>({id:d.id,...d.data()}));
+      if (document.getElementById('resultados-app')?.style.display==='block') renderResultados();
+    });
+    onSnapshot(query(collection(db,'resSaidas'),orderBy('data','desc')), snap=>{
+      resSaidas = snap.docs.map(d=>({id:d.id,...d.data()}));
+      if (document.getElementById('resultados-app')?.style.display==='block') renderResultados();
+    });
+  }
+
+  function getMesAno() {
+    return { mes: resMesAtual, ano: resAnoAtual };
+  }
+
+  function filtrarPorMes(arr) {
+    return arr.filter(x => {
+      if (!x.data) return false;
+      const d = new Date(x.data + 'T12:00:00');
+      return d.getMonth() === resMesAtual && d.getFullYear() === resAnoAtual;
+    });
+  }
+
+  function fmtMoeda(v) {
+    return 'R$ ' + (Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  }
+
+  const MESES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+  window.renderResultados = function() {
+    const { mes, ano } = getMesAno();
+    const entMes = filtrarPorMes(resEntradas);
+    const saiMes = filtrarPorMes(resSaidas);
+    const totalEnt = entMes.reduce((a,x)=>a+(Number(x.valor)||0),0);
+    const totalSai = saiMes.reduce((a,x)=>a+(Number(x.valor)||0),0);
+    const lucro = totalEnt - totalSai;
+
+    // KPIs
+    const kpiEl = document.getElementById('res-kpi-geral');
+    if (kpiEl) kpiEl.innerHTML = `
+      <div class="res-kpi-nav">
+        <button class="res-nav-btn" onclick="mudarMesRes(-1)">‹</button>
+        <span class="res-mes-label">${MESES_PT[mes]} ${ano}</span>
+        <button class="res-nav-btn" onclick="mudarMesRes(1)">›</button>
+      </div>
+      <div class="res-kpi res-kpi-entrada"><div class="res-kpi-label">💰 Total Entradas</div><div class="res-kpi-valor">${fmtMoeda(totalEnt)}</div></div>
+      <div class="res-kpi res-kpi-saida"><div class="res-kpi-label">💸 Total Saídas</div><div class="res-kpi-valor">${fmtMoeda(totalSai)}</div></div>
+      <div class="res-kpi ${lucro>=0?'res-kpi-lucro':'res-kpi-prej'}"><div class="res-kpi-label">${lucro>=0?'📈 Lucro':'📉 Prejuízo'}</div><div class="res-kpi-valor">${fmtMoeda(Math.abs(lucro))}</div></div>`;
+
+    // Entradas list (geral)
+    renderResLista('res-entradas-lista-geral', entMes, 'entrada', '');
+    // Saídas list (geral)
+    renderResLista('res-saidas-lista-geral', saiMes, 'saida', '');
+
+    // Por localidade cards
+    const locCards = document.getElementById('res-localidades-cards');
+    if (locCards) {
+      locCards.innerHTML = resLocalidades.map(loc=>{
+        const lEnt = entMes.filter(x=>x.localidade===loc.id).reduce((a,x)=>a+(Number(x.valor)||0),0);
+        const lSai = saiMes.filter(x=>x.localidade===loc.id).reduce((a,x)=>a+(Number(x.valor)||0),0);
+        const lLuc = lEnt - lSai;
+        return `<div class="res-loc-card">
+          <div class="res-loc-nome">${loc.nome}</div>
+          <div class="res-loc-kpis">
+            <div class="res-loc-kpi"><span class="res-loc-kpi-label">Entradas</span><span class="res-loc-kpi-val green">${fmtMoeda(lEnt)}</span></div>
+            <div class="res-loc-kpi"><span class="res-loc-kpi-label">Saídas</span><span class="res-loc-kpi-val red">${fmtMoeda(lSai)}</span></div>
+            <div class="res-loc-kpi"><span class="res-loc-kpi-label">${lLuc>=0?'Lucro':'Prejuízo'}</span><span class="res-loc-kpi-val ${lLuc>=0?'green':'red'}">${fmtMoeda(Math.abs(lLuc))}</span></div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    // Render localidade panels
+    renderResLocalidadePanels(entMes, saiMes);
+  };
+
+  function renderResLista(elId, items, tipo, locId) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    const filtered = locId ? items.filter(x=>x.localidade===locId) : items;
+    if (!filtered.length) { el.innerHTML='<div class="empty" style="font-size:12px;padding:8px">Nenhum registro</div>'; return; }
+    el.innerHTML = filtered.map(x=>`
+      <div class="res-item">
+        <div class="res-item-info">
+          <div class="res-item-desc">${x.descricao}</div>
+          <div class="res-item-meta">${x.data||''} ${x.categoria?'· '+getCatNome(x.categoria):''} ${x.obs?'· '+x.obs:''}</div>
+        </div>
+        <div class="res-item-valor ${tipo==='entrada'?'green':'red'}">${fmtMoeda(x.valor)}</div>
+        <button class="card-btn del" onclick="excluirRes${tipo==='entrada'?'Entrada':'Saida'}('${x.id}')">✕</button>
+      </div>`).join('');
+  }
+
+  function getCatNome(catId) {
+    return resCategorias.find(c=>c.id===catId)?.nome || catId;
+  }
+
+  function renderResLocalidadePanels(entMes, saiMes) {
+    const panelsEl = document.getElementById('res-localidade-panels');
+    if (!panelsEl) return;
+    panelsEl.innerHTML = resLocalidades.map(loc=>{
+      const lEnt = entMes.filter(x=>x.localidade===loc.id);
+      const lSai = saiMes.filter(x=>x.localidade===loc.id);
+      const totalEnt = lEnt.reduce((a,x)=>a+(Number(x.valor)||0),0);
+      const totalSai = lSai.reduce((a,x)=>a+(Number(x.valor)||0),0);
+      const lucro = totalEnt - totalSai;
+      // Group saidas by category
+      const catGroups = {};
+      lSai.forEach(s=>{
+        const cn = getCatNome(s.categoria);
+        if (!catGroups[cn]) catGroups[cn]=0;
+        catGroups[cn]+=(Number(s.valor)||0);
+      });
+      return `<div class="res-panel panel" id="res-loc-${loc.id}" style="display:none">
+        <div class="res-loc-header">
+          <div class="res-loc-title">📍 ${loc.nome}</div>
+          <div class="res-loc-kpis" style="margin:0">
+            <div class="res-loc-kpi"><span class="res-loc-kpi-label">Entradas</span><span class="res-loc-kpi-val green">${fmtMoeda(totalEnt)}</span></div>
+            <div class="res-loc-kpi"><span class="res-loc-kpi-label">Saídas</span><span class="res-loc-kpi-val red">${fmtMoeda(totalSai)}</span></div>
+            <div class="res-loc-kpi"><span class="res-loc-kpi-label">${lucro>=0?'Lucro':'Prejuízo'}</span><span class="res-loc-kpi-val ${lucro>=0?'green':'red'}">${fmtMoeda(Math.abs(lucro))}</span></div>
+          </div>
+        </div>
+        ${Object.keys(catGroups).length?`<div class="res-cat-breakdown">${Object.entries(catGroups).map(([k,v])=>`<div class="res-cat-item"><span>${k}</span><span class="red">${fmtMoeda(v)}</span></div>`).join('')}</div>`:''}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px">
+          <div>
+            <div class="res-sub-title">💰 Entradas</div>
+            <div id="res-ent-${loc.id}"></div>
+            <button class="btn-new" style="margin-top:8px;font-size:12px" onclick="abrirNovaEntrada('${loc.id}')">+ Nova entrada</button>
+          </div>
+          <div>
+            <div class="res-sub-title">💸 Saídas</div>
+            <div id="res-sai-${loc.id}"></div>
+            <button class="btn-new" style="margin-top:8px;font-size:12px" onclick="abrirNovaSaida('${loc.id}')">+ Nova saída</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    // Populate lists
+    resLocalidades.forEach(loc=>{
+      renderResLista('res-ent-'+loc.id, entMes, 'entrada', loc.id);
+      renderResLista('res-sai-'+loc.id, saiMes, 'saida', loc.id);
+    });
+  }
+
+  function renderResLocalidadeTabs() {
+    const tabsEl = document.getElementById('res-localidade-tabs');
+    if (!tabsEl) return;
+    tabsEl.innerHTML = resLocalidades.map(loc=>`
+      <button class="tab-btn" data-tab="res-loc-${loc.id}" onclick="switchResTab('res-loc-${loc.id}',this)">📍 ${loc.nome}</button>`).join('');
+  }
+
+  function renderResConfig() {
+    const locList = document.getElementById('res-localidades-list');
+    if (locList) locList.innerHTML = resLocalidades.map(l=>`
+      <div class="usuario-card">
+        <div class="usuario-body"><div class="usuario-nome">${l.nome}</div></div>
+        <button class="card-btn del" onclick="excluirLocalidade('${l.id}')">✕</button>
+      </div>`).join('') || '<div class="empty">Nenhuma localidade</div>';
+    const catList = document.getElementById('res-categorias-list');
+    if (catList) catList.innerHTML = resCategorias.map(c=>`
+      <div class="usuario-card">
+        <div class="usuario-body"><div class="usuario-nome">${c.nome}</div></div>
+        <button class="card-btn del" onclick="excluirCategoria('${c.id}')">✕</button>
+      </div>`).join('') || '<div class="empty">Nenhuma categoria</div>';
+  }
+
+  function popularResSelects() {
+    ['entrada-localidade','saida-localidade'].forEach(id=>{
+      const el = document.getElementById(id);
+      if (!el) return;
+      const cur = el.value;
+      el.innerHTML = '<option value="">Selecione...</option>' + resLocalidades.map(l=>`<option value="${l.id}">${l.nome}</option>`).join('');
+      if (cur) el.value = cur;
+    });
+    const catEl = document.getElementById('saida-categoria');
+    if (catEl) {
+      const cur = catEl.value;
+      catEl.innerHTML = '<option value="">Selecione...</option>' + resCategorias.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('');
+      if (cur) catEl.value = cur;
+    }
+  }
+
+  window.switchResTab = (tabId, btn) => {
+    // Hide all res panels
+    document.querySelectorAll('.res-panel').forEach(p=>p.style.display='none');
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    const panel = document.getElementById(tabId);
+    if (panel) panel.style.display='block';
+    if (btn) btn.classList.add('active');
+  };
+
+  window.mudarMesRes = (dir) => {
+    resMesAtual += dir;
+    if (resMesAtual < 0) { resMesAtual = 11; resAnoAtual--; }
+    if (resMesAtual > 11) { resMesAtual = 0; resAnoAtual++; }
+    renderResultados();
+  };
+
+  // --- ENTRADA CRUD ---
+  window.abrirNovaEntrada = (locId='') => {
+    document.getElementById('entrada-id').value = '';
+    document.getElementById('entrada-desc').value = '';
+    document.getElementById('entrada-valor').value = '';
+    document.getElementById('entrada-data').value = new Date().toISOString().split('T')[0];
+    document.getElementById('entrada-obs').value = '';
+    popularResSelects();
+    if (locId) document.getElementById('entrada-localidade').value = locId;
+    document.getElementById('modal-entrada').classList.add('open');
+    setTimeout(()=>document.getElementById('entrada-desc').focus(),100);
+  };
+
+  window.salvarEntrada = async () => {
+    const desc = document.getElementById('entrada-desc').value.trim();
+    const valor = parseValCC(document.getElementById('entrada-valor').value);
+    const data = document.getElementById('entrada-data').value;
+    const localidade = document.getElementById('entrada-localidade').value;
+    const obs = document.getElementById('entrada-obs').value.trim();
+    if (!desc||!valor||!data||!localidade) { showToast('Preencha todos os campos obrigatórios.'); return; }
+    const dados = { descricao:desc, valor, data, localidade, obs, criadoEm:serverTimestamp() };
+    const id = document.getElementById('entrada-id').value;
+    if (id) await updateDoc(doc(db,'resEntradas',id), dados);
+    else await addDoc(collection(db,'resEntradas'), dados);
+    closeModal('modal-entrada');
+    showToast('Entrada salva!');
+  };
+
+  window.excluirResEntrada = async (id) => {
+    if (!confirm('Excluir esta entrada?')) return;
+    await deleteDoc(doc(db,'resEntradas',id));
+    showToast('Entrada removida.');
+  };
+
+  // --- SAÍDA CRUD ---
+  window.abrirNovaSaida = (locId='') => {
+    document.getElementById('saida-id').value = '';
+    document.getElementById('saida-desc').value = '';
+    document.getElementById('saida-valor').value = '';
+    document.getElementById('saida-data').value = new Date().toISOString().split('T')[0];
+    document.getElementById('saida-obs').value = '';
+    popularResSelects();
+    if (locId) document.getElementById('saida-localidade').value = locId;
+    document.getElementById('modal-saida').classList.add('open');
+    setTimeout(()=>document.getElementById('saida-desc').focus(),100);
+  };
+
+  window.salvarSaida = async () => {
+    const desc = document.getElementById('saida-desc').value.trim();
+    const valor = parseValCC(document.getElementById('saida-valor').value);
+    const data = document.getElementById('saida-data').value;
+    const localidade = document.getElementById('saida-localidade').value;
+    const categoria = document.getElementById('saida-categoria').value;
+    const obs = document.getElementById('saida-obs').value.trim();
+    if (!desc||!valor||!data||!localidade||!categoria) { showToast('Preencha todos os campos obrigatórios.'); return; }
+    const dados = { descricao:desc, valor, data, localidade, categoria, obs, criadoEm:serverTimestamp() };
+    const id = document.getElementById('saida-id').value;
+    if (id) await updateDoc(doc(db,'resSaidas',id), dados);
+    else await addDoc(collection(db,'resSaidas'), dados);
+    closeModal('modal-saida');
+    showToast('Saída salva!');
+  };
+
+  window.excluirResSaida = async (id) => {
+    if (!confirm('Excluir esta saída?')) return;
+    await deleteDoc(doc(db,'resSaidas',id));
+    showToast('Saída removida.');
+  };
+
+  // --- LOCALIDADE CRUD ---
+  window.abrirNovaLocalidade = () => {
+    document.getElementById('localidade-nome').value = '';
+    document.getElementById('modal-localidade').classList.add('open');
+    setTimeout(()=>document.getElementById('localidade-nome').focus(),100);
+  };
+  window.salvarLocalidade = async () => {
+    const nome = document.getElementById('localidade-nome').value.trim();
+    if (!nome) { showToast('Digite o nome.'); return; }
+    await addDoc(collection(db,'resLocalidades'),{nome,criadoEm:serverTimestamp()});
+    closeModal('modal-localidade');
+    showToast('Localidade cadastrada!');
+  };
+  window.excluirLocalidade = async (id) => {
+    if (!confirm('Excluir esta localidade?')) return;
+    await deleteDoc(doc(db,'resLocalidades',id));
+    showToast('Localidade removida.');
+  };
+
+  // --- CATEGORIA CRUD ---
+  window.abrirNovaCategoria = () => {
+    document.getElementById('categoria-nome').value = '';
+    document.getElementById('modal-categoria').classList.add('open');
+    setTimeout(()=>document.getElementById('categoria-nome').focus(),100);
+  };
+  window.salvarCategoria = async () => {
+    const nome = document.getElementById('categoria-nome').value.trim();
+    if (!nome) { showToast('Digite o nome.'); return; }
+    await addDoc(collection(db,'resCategorias'),{nome,criadoEm:serverTimestamp()});
+    closeModal('modal-categoria');
+    showToast('Categoria cadastrada!');
+  };
+  window.excluirCategoria = async (id) => {
+    if (!confirm('Excluir esta categoria?')) return;
+    await deleteDoc(doc(db,'resCategorias',id));
+    showToast('Categoria removida.');
+  };
+
   window.exportCSV=()=>{
     const header=['Título','Cliente','Valor (R$)','Produtos','Etapa','Follow-up','Responsável','Observações'];
     const rows=propostas.map(p=>[p.titulo,p.cliente,p.valor,(Array.isArray(p.produtos)?p.produtos:p.produto?[p.produto]:[]).join('|'),STAGES[p.etapa]||'',p.data,p.resp,p.obs].map(v=>`"${(v||'').toString().replace(/"/g,'""')}"`).join(','));
@@ -3626,7 +3971,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .ms-title{font-size:26px;font-weight:800;color:#1A1A18;margin-bottom:.4rem}
 .ms-title-hl{color:#1A1A18;text-decoration:underline;text-decoration-color:#1A1A18;text-underline-offset:4px}
 .ms-subtitle{font-size:14px;color:#1A1A18;opacity:.7;margin-bottom:2rem;line-height:1.6;max-width:400px;margin-left:auto;margin-right:auto}
-.ms-cards{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:2rem}
+.ms-cards{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:2rem}.ms-cards.has-three{grid-template-columns:1fr 1fr 1fr}
 .ms-card{background:#fff;border-radius:16px;padding:2rem 1.5rem;cursor:pointer;transition:transform .18s,box-shadow .18s;border:2px solid rgba(0,0,0,.06);box-shadow:0 4px 16px rgba(0,0,0,.1);display:flex;flex-direction:column;align-items:center;text-align:center}
 .ms-card:hover{transform:translateY(-5px);box-shadow:0 16px 40px rgba(0,0,0,.15);border-color:#1A1A18}
 .ms-card-icon-wrap{width:90px;height:90px;border-radius:50%;background:#FFF8D6;display:flex;align-items:center;justify-content:center;margin-bottom:1.2rem}
@@ -3634,6 +3979,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .ms-card-bar{height:3px;width:36px;background:#F5C400;border-radius:2px;margin:.3rem auto .8rem}
 .ms-card-desc{font-size:12px;color:#666;line-height:1.6;flex:1;margin-bottom:1.2rem}
 .ms-card-arrow-btn{width:40px;height:40px;border-radius:50%;background:#1A1A18;color:#F5C400;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;transition:transform .15s}
+.ms-card-badge-adm{font-size:10px;font-weight:700;background:#1A1A18;color:#F5C400;padding:3px 8px;border-radius:20px;margin-bottom:8px}
 .ms-card:hover .ms-card-arrow-btn{transform:scale(1.12);background:#333}
 .ms-footer{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:1rem;flex-wrap:wrap}
 .ms-user-pill{display:flex;align-items:center;gap:6px;background:#1A1A18;border-radius:20px;padding:7px 14px;font-size:12px;color:#F5C400}
@@ -3644,6 +3990,41 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .ms-tagline{font-size:11px;color:#1A1A18;opacity:.6;font-weight:500}
 .ms-tagline-hl{font-weight:700;opacity:1}
 /* DANGER ZONE */
+/* RESULTADOS */
+.res-panel{padding:16px 20px}
+.res-kpi-grid{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px;padding:14px;background:#fff;border-radius:12px;border:1px solid #ebe9e0}
+.res-kpi-nav{display:flex;align-items:center;gap:10px;margin-right:8px}
+.res-nav-btn{width:30px;height:30px;border-radius:50%;border:1.5px solid #ddd;background:#fff;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;font-weight:700;transition:all .15s}
+.res-nav-btn:hover{background:#F5C400;border-color:#F5C400}
+.res-mes-label{font-size:14px;font-weight:700;color:#1A1A18;min-width:140px;text-align:center}
+.res-kpi{padding:10px 16px;border-radius:10px;min-width:150px}
+.res-kpi-entrada{background:#EAF3DE;border:1.5px solid #a8d5a2}
+.res-kpi-saida{background:#FCEBEB;border:1.5px solid #f5a0a0}
+.res-kpi-lucro{background:#E8F4FD;border:1.5px solid #90cdf4}
+.res-kpi-prej{background:#FCEBEB;border:1.5px solid #f5a0a0}
+.res-kpi-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#666;margin-bottom:4px}
+.res-kpi-valor{font-size:18px;font-weight:800;color:#1A1A18}
+.res-section-title{font-size:13px;font-weight:700;color:#1A1A18;border-bottom:2px solid #F5C400;padding-bottom:6px;margin-bottom:12px}
+.res-sub-title{font-size:12px;font-weight:700;color:#555;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em}
+.res-item{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#fff;border-radius:8px;border:1px solid #ebe9e0;margin-bottom:6px}
+.res-item-info{flex:1;min-width:0}
+.res-item-desc{font-size:13px;font-weight:600;color:#1A1A18;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.res-item-meta{font-size:10px;color:#999;margin-top:1px}
+.res-item-valor{font-size:13px;font-weight:700;white-space:nowrap;flex-shrink:0}
+.res-item-valor.green{color:#2D6A0A}
+.res-item-valor.red{color:#A32D2D}
+.res-loc-card{background:#fff;border-radius:12px;border:1px solid #ebe9e0;padding:14px 16px;margin-bottom:10px}
+.res-loc-nome{font-size:14px;font-weight:700;color:#1A1A18;margin-bottom:10px}
+.res-loc-kpis{display:flex;gap:16px;flex-wrap:wrap}
+.res-loc-kpi{display:flex;flex-direction:column;gap:2px}
+.res-loc-kpi-label{font-size:10px;color:#888;text-transform:uppercase;font-weight:600}
+.res-loc-kpi-val{font-size:14px;font-weight:700}
+.res-loc-kpi-val.green{color:#2D6A0A}
+.res-loc-kpi-val.red{color:#A32D2D}
+.res-loc-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;padding-bottom:12px;border-bottom:2px solid #F5C400}
+.res-loc-title{font-size:16px;font-weight:800;color:#1A1A18}
+.res-cat-breakdown{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.res-cat-item{display:flex;align-items:center;gap:6px;background:#FCEBEB;border-radius:8px;padding:5px 10px;font-size:12px}
 .danger-zone{margin-top:28px;border:2px solid #E24B4A;border-radius:12px;overflow:hidden}
 .danger-zone-header{display:flex;align-items:center;gap:12px;padding:14px 16px;background:#FCEBEB}
 .danger-zone-icon{font-size:22px;flex-shrink:0}
@@ -3919,6 +4300,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           <div class="ms-card-title">Gestão de Compras</div>
           <div class="ms-card-bar"></div>
           <div class="ms-card-desc">Controle compras, fornecedores, cotações e pedidos com mais organização e economia.</div>
+          <div class="ms-card-arrow-btn">→</div>
+        </div>
+        <div class="ms-card ms-card-resultados" id="ms-card-resultados" onclick="entrarModulo('resultados')" style="display:none">
+          <div class="ms-card-icon-wrap">
+            <svg viewBox="0 0 52 52" width="52" height="52" xmlns="http://www.w3.org/2000/svg">
+              <rect x="6" y="32" width="8" height="14" rx="2" fill="#1A1A18"/>
+              <rect x="18" y="22" width="8" height="24" rx="2" fill="#F5C400"/>
+              <rect x="30" y="14" width="8" height="32" rx="2" fill="#1A1A18"/>
+              <rect x="42" y="8" width="8" height="38" rx="2" fill="#F5C400"/>
+              <polyline points="10,28 22,18 34,10 50,4" fill="none" stroke="#1A1A18" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="ms-card-title">Resultados</div>
+          <div class="ms-card-bar"></div>
+          <div class="ms-card-desc">Faturamento, despesas e lucro por localidade. Visão financeira completa da empresa.</div>
+          <div class="ms-card-badge-adm">🔒 ADM</div>
           <div class="ms-card-arrow-btn">→</div>
         </div>
       </div>
@@ -4593,5 +4990,120 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="mf"><button class="btn-cancel" onclick="closeModal('modal-fornecedor')">Cancelar</button><button class="btn-save" onclick="salvarFornecedor()">Salvar</button></div>
   </div>
 </div>
+<!-- RESULTADOS APP -->
+<div id="resultados-app" style="display:none;min-height:100vh;background:#F8F8F6">
+  <div class="header">
+    <div class="brand">
+      <svg viewBox="0 0 40 36" width="28" height="25" xmlns="http://www.w3.org/2000/svg"><polygon points="0,0 40,0 20,36" fill="#1A1A18"/></svg>
+      <div><div class="brand-name">Resultados</div><div class="brand-sub">Avante Automação</div></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="btn-modulo" onclick="voltarModulos()">← Módulos</button>
+    </div>
+  </div>
+  <div class="tabs-bar">
+    <button class="tab-btn active" data-tab="res-geral" onclick="switchResTab('res-geral',this)">📊 Geral</button>
+    <div id="res-localidade-tabs" style="display:contents"></div>
+    <button class="tab-btn" data-tab="res-config" onclick="switchResTab('res-config',this)">⚙️ Configurações</button>
+  </div>
+  <!-- GERAL -->
+  <div id="res-geral" class="panel res-panel">
+    <div class="res-kpi-grid" id="res-kpi-geral"></div>
+    <div class="res-section-title">Entradas e Saídas — Mês atual</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+      <div>
+        <div class="res-sub-title">💰 Entradas</div>
+        <div id="res-entradas-lista-geral"></div>
+        <button class="btn-new" style="margin-top:8px;font-size:12px" onclick="abrirNovaEntrada('')">+ Nova entrada</button>
+      </div>
+      <div>
+        <div class="res-sub-title">💸 Saídas</div>
+        <div id="res-saidas-lista-geral"></div>
+        <button class="btn-new" style="margin-top:8px;font-size:12px" onclick="abrirNovaSaida('')">+ Nova saída</button>
+      </div>
+    </div>
+    <div class="res-section-title">Por localidade</div>
+    <div id="res-localidades-cards"></div>
+  </div>
+  <!-- CONFIG -->
+  <div id="res-config" class="panel res-panel" style="display:none">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+      <div>
+        <div class="sec-header"><div class="sec-title">📍 Localidades</div><button class="btn-new" onclick="abrirNovaLocalidade()">+ Nova</button></div>
+        <div id="res-localidades-list"></div>
+      </div>
+      <div>
+        <div class="sec-header"><div class="sec-title">🏷️ Categorias de Saída</div><button class="btn-new" onclick="abrirNovaCategoria()">+ Nova</button></div>
+        <div id="res-categorias-list"></div>
+      </div>
+    </div>
+  </div>
+  <!-- LOCALIDADE PANELS (gerados dinamicamente) -->
+  <div id="res-localidade-panels"></div>
+</div>
+
+<!-- MODAL ENTRADA -->
+<div class="modal-bg" id="modal-entrada">
+  <div class="modal" style="max-width:440px">
+    <div class="mh"><div class="mt">💰 Nova entrada</div><button class="mc" onclick="closeModal('modal-entrada')">×</button></div>
+    <div class="fg">
+      <input type="hidden" id="entrada-id">
+      <div class="fgf"><label class="fl">Descrição *</label><input id="entrada-desc" type="text" placeholder="Ex: Faturamento projeto X"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label class="fl">Valor (R$) *</label><input id="entrada-valor" type="text" inputmode="numeric" placeholder="0,00"></div>
+        <div><label class="fl">Data *</label><input id="entrada-data" type="date"></div>
+      </div>
+      <div class="fgf"><label class="fl">Localidade *</label>
+        <select id="entrada-localidade"><option value="">Selecione...</option></select>
+      </div>
+      <div><label class="fl">Observação</label><input id="entrada-obs" type="text" placeholder="Opcional"></div>
+    </div>
+    <div class="mf"><button class="btn-cancel" onclick="closeModal('modal-entrada')">Cancelar</button><button class="btn-save" onclick="salvarEntrada()">Salvar</button></div>
+  </div>
+</div>
+
+<!-- MODAL SAÍDA -->
+<div class="modal-bg" id="modal-saida">
+  <div class="modal" style="max-width:440px">
+    <div class="mh"><div class="mt">💸 Nova saída</div><button class="mc" onclick="closeModal('modal-saida')">×</button></div>
+    <div class="fg">
+      <input type="hidden" id="saida-id">
+      <div class="fgf"><label class="fl">Descrição *</label><input id="saida-desc" type="text" placeholder="Ex: Aluguel de equipamento"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label class="fl">Valor (R$) *</label><input id="saida-valor" type="text" inputmode="numeric" placeholder="0,00"></div>
+        <div><label class="fl">Data *</label><input id="saida-data" type="date"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label class="fl">Localidade *</label><select id="saida-localidade"><option value="">Selecione...</option></select></div>
+        <div><label class="fl">Categoria *</label><select id="saida-categoria"><option value="">Selecione...</option></select></div>
+      </div>
+      <div><label class="fl">Observação</label><input id="saida-obs" type="text" placeholder="Opcional"></div>
+    </div>
+    <div class="mf"><button class="btn-cancel" onclick="closeModal('modal-saida')">Cancelar</button><button class="btn-save" onclick="salvarSaida()">Salvar</button></div>
+  </div>
+</div>
+
+<!-- MODAL LOCALIDADE -->
+<div class="modal-bg" id="modal-localidade">
+  <div class="modal" style="max-width:380px">
+    <div class="mh"><div class="mt">📍 Nova localidade</div><button class="mc" onclick="closeModal('modal-localidade')">×</button></div>
+    <div class="fg">
+      <div class="fgf"><label class="fl">Nome da localidade *</label><input id="localidade-nome" type="text" placeholder="Ex: São Paulo"></div>
+    </div>
+    <div class="mf"><button class="btn-cancel" onclick="closeModal('modal-localidade')">Cancelar</button><button class="btn-save" onclick="salvarLocalidade()">Salvar</button></div>
+  </div>
+</div>
+
+<!-- MODAL CATEGORIA -->
+<div class="modal-bg" id="modal-categoria">
+  <div class="modal" style="max-width:380px">
+    <div class="mh"><div class="mt">🏷️ Nova categoria</div><button class="mc" onclick="closeModal('modal-categoria')">×</button></div>
+    <div class="fg">
+      <div class="fgf"><label class="fl">Nome da categoria *</label><input id="categoria-nome" type="text" placeholder="Ex: Custo de Viagem"></div>
+    </div>
+    <div class="mf"><button class="btn-cancel" onclick="closeModal('modal-categoria')">Cancelar</button><button class="btn-save" onclick="salvarCategoria()">Salvar</button></div>
+  </div>
+</div>
+
 </body>
 </html>
