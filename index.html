@@ -75,11 +75,7 @@
         const msCards = resCard.closest('.ms-cards');
         if (msCards && currentUserRole === 'admin') msCards.classList.add('has-three');
       }
-      // Show Resultados shortcut buttons in other modules for ADM
-      ['btn-resultados-propostas','btn-resultados-compras'].forEach(id=>{
-        const el = document.getElementById(id);
-        if (el) el.style.display = currentUserRole === 'admin' ? 'inline-flex' : 'none';
-      });
+
       subscribeAll();
     } else {
       document.getElementById('login-screen').style.display='flex';
@@ -3189,6 +3185,7 @@
   // ============================================================
   let resLocalidades = [];
   let resCategorias = [];
+  let resCatEntradas = [];
   let resEntradas = [];
   let resSaidas = [];
   let resMesAtual = new Date().getMonth();
@@ -3217,6 +3214,11 @@
       if (!resCategorias.length) {
         DEFAULT_CATEGORIAS.forEach(nome=>addDoc(collection(db,'resCategorias'),{nome,criadoEm:serverTimestamp()}));
       }
+      renderResConfig();
+      popularResSelects();
+    });
+    onSnapshot(query(collection(db,'resCatEntradas'),orderBy('nome')), snap=>{
+      resCatEntradas = snap.docs.map(d=>({id:d.id,...d.data()}));
       renderResConfig();
       popularResSelects();
     });
@@ -3376,13 +3378,22 @@
     if (locList) locList.innerHTML = resLocalidades.map(l=>`
       <div class="usuario-card">
         <div class="usuario-body"><div class="usuario-nome">${l.nome}</div></div>
+        <button class="btn-sm" onclick="editarLocalidade('${l.id}','${l.nome.replace(/'/g,'&#39;')}')">✎</button>
         <button class="card-btn del" onclick="excluirLocalidade('${l.id}')">✕</button>
       </div>`).join('') || '<div class="empty">Nenhuma localidade</div>';
     const catList = document.getElementById('res-categorias-list');
-    if (catList) catList.innerHTML = resCategorias.map(c=>`
+    if (catList) catList.innerHTML = resCategorias.map(cat=>`
       <div class="usuario-card">
-        <div class="usuario-body"><div class="usuario-nome">${c.nome}</div></div>
-        <button class="card-btn del" onclick="excluirCategoria('${c.id}')">✕</button>
+        <div class="usuario-body"><div class="usuario-nome">${cat.nome}</div></div>
+        <button class="btn-sm" onclick="editarCategoria('${cat.id}','${cat.nome.replace(/'/g,'&#39;')}')">✎</button>
+        <button class="card-btn del" onclick="excluirCategoria('${cat.id}')">✕</button>
+      </div>`).join('') || '<div class="empty">Nenhuma categoria</div>';
+    const catEntList = document.getElementById('res-cat-entrada-list');
+    if (catEntList) catEntList.innerHTML = resCatEntradas.map(cat=>`
+      <div class="usuario-card">
+        <div class="usuario-body"><div class="usuario-nome">${cat.nome}</div></div>
+        <button class="btn-sm" onclick="editarCatEntrada('${cat.id}','${cat.nome.replace(/'/g,'&#39;')}')">✎</button>
+        <button class="card-btn del" onclick="excluirCatEntrada('${cat.id}')">✕</button>
       </div>`).join('') || '<div class="empty">Nenhuma categoria</div>';
   }
 
@@ -3394,11 +3405,17 @@
       el.innerHTML = '<option value="">Selecione...</option>' + resLocalidades.map(l=>`<option value="${l.id}">${l.nome}</option>`).join('');
       if (cur) el.value = cur;
     });
-    const catEl = document.getElementById('saida-categoria');
-    if (catEl) {
-      const cur = catEl.value;
-      catEl.innerHTML = '<option value="">Selecione...</option>' + resCategorias.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('');
-      if (cur) catEl.value = cur;
+    const catSaiEl = document.getElementById('saida-categoria');
+    if (catSaiEl) {
+      const cur = catSaiEl.value;
+      catSaiEl.innerHTML = '<option value="">Selecione...</option>' + resCategorias.map(ct=>`<option value="${ct.id}">${ct.nome}</option>`).join('');
+      if (cur) catSaiEl.value = cur;
+    }
+    const catEntEl = document.getElementById('entrada-categoria');
+    if (catEntEl) {
+      const cur = catEntEl.value;
+      catEntEl.innerHTML = '<option value="">Selecione...</option>' + resCatEntradas.map(ct=>`<option value="${ct.id}">${ct.nome}</option>`).join('');
+      if (cur) catEntEl.value = cur;
     }
   }
 
@@ -3432,6 +3449,7 @@
     document.getElementById('entrada-obs').value = '';
     popularResSelects();
     if (locId) document.getElementById('entrada-localidade').value = locId;
+    document.getElementById('entrada-categoria').value = '';
     document.getElementById('modal-entrada').classList.add('open');
     setTimeout(()=>document.getElementById('entrada-desc').focus(),100);
   };
@@ -3441,9 +3459,10 @@
     const valor = parseValCC(document.getElementById('entrada-valor').value);
     const data = document.getElementById('entrada-data').value;
     const localidade = document.getElementById('entrada-localidade').value;
+    const categoria = document.getElementById('entrada-categoria').value;
     const obs = document.getElementById('entrada-obs').value.trim();
     if (!desc||!valor||!data||!localidade) { showToast('Preencha todos os campos obrigatórios.'); return; }
-    const dados = { descricao:desc, valor, data, localidade, obs, criadoEm:serverTimestamp() };
+    const dados = { descricao:desc, valor, data, localidade, categoria, obs, criadoEm:serverTimestamp() };
     const id = document.getElementById('entrada-id').value;
     if (id) await updateDoc(doc(db,'resEntradas',id), dados);
     else await addDoc(collection(db,'resEntradas'), dados);
@@ -3494,16 +3513,27 @@
 
   // --- LOCALIDADE CRUD ---
   window.abrirNovaLocalidade = () => {
+    document.getElementById('localidade-edit-id').value = '';
     document.getElementById('localidade-nome').value = '';
+    document.getElementById('modal-localidade-titulo').textContent = '📍 Nova localidade';
+    document.getElementById('modal-localidade').classList.add('open');
+    setTimeout(()=>document.getElementById('localidade-nome').focus(),100);
+  };
+  window.editarLocalidade = (id, nome) => {
+    document.getElementById('localidade-edit-id').value = id;
+    document.getElementById('localidade-nome').value = nome;
+    document.getElementById('modal-localidade-titulo').textContent = '📍 Editar localidade';
     document.getElementById('modal-localidade').classList.add('open');
     setTimeout(()=>document.getElementById('localidade-nome').focus(),100);
   };
   window.salvarLocalidade = async () => {
     const nome = document.getElementById('localidade-nome').value.trim();
     if (!nome) { showToast('Digite o nome.'); return; }
-    await addDoc(collection(db,'resLocalidades'),{nome,criadoEm:serverTimestamp()});
+    const id = document.getElementById('localidade-edit-id').value;
+    if (id) await updateDoc(doc(db,'resLocalidades',id),{nome});
+    else await addDoc(collection(db,'resLocalidades'),{nome,criadoEm:serverTimestamp()});
     closeModal('modal-localidade');
-    showToast('Localidade cadastrada!');
+    showToast(id?'Localidade atualizada!':'Localidade cadastrada!');
   };
   window.excluirLocalidade = async (id) => {
     if (!confirm('Excluir esta localidade?')) return;
@@ -3511,22 +3541,63 @@
     showToast('Localidade removida.');
   };
 
-  // --- CATEGORIA CRUD ---
+  // --- CATEGORIA SAÍDA CRUD ---
   window.abrirNovaCategoria = () => {
+    document.getElementById('categoria-edit-id').value = '';
     document.getElementById('categoria-nome').value = '';
+    document.getElementById('modal-categoria-titulo').textContent = '🏷️ Nova categoria de saída';
+    document.getElementById('modal-categoria').classList.add('open');
+    setTimeout(()=>document.getElementById('categoria-nome').focus(),100);
+  };
+  window.editarCategoria = (id, nome) => {
+    document.getElementById('categoria-edit-id').value = id;
+    document.getElementById('categoria-nome').value = nome;
+    document.getElementById('modal-categoria-titulo').textContent = '🏷️ Editar categoria de saída';
     document.getElementById('modal-categoria').classList.add('open');
     setTimeout(()=>document.getElementById('categoria-nome').focus(),100);
   };
   window.salvarCategoria = async () => {
     const nome = document.getElementById('categoria-nome').value.trim();
     if (!nome) { showToast('Digite o nome.'); return; }
-    await addDoc(collection(db,'resCategorias'),{nome,criadoEm:serverTimestamp()});
+    const id = document.getElementById('categoria-edit-id').value;
+    if (id) await updateDoc(doc(db,'resCategorias',id),{nome});
+    else await addDoc(collection(db,'resCategorias'),{nome,criadoEm:serverTimestamp()});
     closeModal('modal-categoria');
-    showToast('Categoria cadastrada!');
+    showToast(id?'Categoria atualizada!':'Categoria cadastrada!');
   };
   window.excluirCategoria = async (id) => {
     if (!confirm('Excluir esta categoria?')) return;
     await deleteDoc(doc(db,'resCategorias',id));
+    showToast('Categoria removida.');
+  };
+
+  // --- CATEGORIA ENTRADA CRUD ---
+  window.abrirNovaCatEntrada = () => {
+    document.getElementById('cat-entrada-edit-id').value = '';
+    document.getElementById('cat-entrada-nome').value = '';
+    document.getElementById('modal-cat-entrada-titulo').textContent = '💰 Nova categoria de entrada';
+    document.getElementById('modal-cat-entrada').classList.add('open');
+    setTimeout(()=>document.getElementById('cat-entrada-nome').focus(),100);
+  };
+  window.editarCatEntrada = (id, nome) => {
+    document.getElementById('cat-entrada-edit-id').value = id;
+    document.getElementById('cat-entrada-nome').value = nome;
+    document.getElementById('modal-cat-entrada-titulo').textContent = '💰 Editar categoria de entrada';
+    document.getElementById('modal-cat-entrada').classList.add('open');
+    setTimeout(()=>document.getElementById('cat-entrada-nome').focus(),100);
+  };
+  window.salvarCatEntrada = async () => {
+    const nome = document.getElementById('cat-entrada-nome').value.trim();
+    if (!nome) { showToast('Digite o nome.'); return; }
+    const id = document.getElementById('cat-entrada-edit-id').value;
+    if (id) await updateDoc(doc(db,'resCatEntradas',id),{nome});
+    else await addDoc(collection(db,'resCatEntradas'),{nome,criadoEm:serverTimestamp()});
+    closeModal('modal-cat-entrada');
+    showToast(id?'Categoria atualizada!':'Categoria cadastrada!');
+  };
+  window.excluirCatEntrada = async (id) => {
+    if (!confirm('Excluir esta categoria?')) return;
+    await deleteDoc(doc(db,'resCatEntradas',id));
     showToast('Categoria removida.');
   };
 
@@ -4371,9 +4442,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <div class="hright">
       <div class="user-pill">👤 <span id="compras-user-label"></span></div>
-      <button class="btn-modulo" onclick="voltarModulos()">← Módulos</button>
-      <button class="btn-switch" onclick="entrarModulo('propostas')" title="Ir para Gestão de Propostas">📋 Propostas</button>
-      <button class="btn-switch btn-resultados-switch" id="btn-resultados-compras" onclick="entrarModulo('resultados')" style="display:none">📊 Resultados</button>
+      <button class="btn-modulo" onclick="voltarModulos()">⊞ Módulos</button>
       <button class="btn-sm" onclick="doLogout()">Sair</button>
     </div>
   </div>
@@ -4411,7 +4480,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div id="main-app">
   <div class="header">
     <div class="brand"><div class="logo-sm"><svg viewBox="0 0 40 36" width="20" height="18" xmlns="http://www.w3.org/2000/svg"><polygon points="0,0 40,0 20,36" fill="#1A1A18"/></svg></div><div><div class="bn">Avante Automação Industrial</div><div class="bs">Gestão de Propostas Comerciais</div></div></div>
-    <div class="hright"><div class="user-pill">👤 <span id="user-label"></span> <span class="badge-adm" id="role-badge">ADM</span></div><button class="btn-modulo" onclick="voltarModulos()">← Módulos</button><button class="btn-switch" onclick="entrarModulo('compras')">🛒 Compras</button><button class="btn-switch btn-resultados-switch" id="btn-resultados-propostas" onclick="entrarModulo('resultados')" style="display:none">📊 Resultados</button><button class="btn-sm" onclick="doLogout()">Sair</button></div>
+    <div class="hright"><div class="user-pill">👤 <span id="user-label"></span> <span class="badge-adm" id="role-badge">ADM</span></div><button class="btn-modulo" onclick="voltarModulos()">⊞ Módulos</button><button class="btn-sm" onclick="doLogout()">Sair</button></div>
   </div>
   <div class="tabs">
     <button class="tab active" onclick="showPanel('dashboard',this)">Dashboard</button>
@@ -5031,9 +5100,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <div class="hright">
       <div class="user-pill">👤 <span id="res-user-label"></span> <span class="badge-adm">ADM</span></div>
-      <button class="btn-switch" onclick="entrarModulo('propostas')">📋 Propostas</button>
-      <button class="btn-switch" onclick="entrarModulo('compras')">🛒 Compras</button>
-      <button class="btn-modulo" onclick="voltarModulos()">← Módulos</button>
+      <button class="btn-modulo" onclick="voltarModulos()">⊞ Módulos</button>
       <button class="btn-sm" onclick="doLogout()">Sair</button>
     </div>
   </div>
@@ -5069,13 +5136,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
   <!-- CONFIG -->
   <div id="res-config" class="panel" style="display:none">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px">
       <div>
         <div class="sec-header"><div class="sec-title">📍 Localidades</div><button class="btn-new" onclick="abrirNovaLocalidade()">+ Nova</button></div>
         <div id="res-localidades-list"></div>
       </div>
       <div>
-        <div class="sec-header"><div class="sec-title">🏷️ Categorias de Saída</div><button class="btn-new" onclick="abrirNovaCategoria()">+ Nova</button></div>
+        <div class="sec-header"><div class="sec-title">💰 Categorias de Entrada</div><button class="btn-new" onclick="abrirNovaCatEntrada()">+ Nova</button></div>
+        <div id="res-cat-entrada-list"></div>
+      </div>
+      <div>
+        <div class="sec-header"><div class="sec-title">💸 Categorias de Saída</div><button class="btn-new" onclick="abrirNovaCategoria()">+ Nova</button></div>
         <div id="res-categorias-list"></div>
       </div>
     </div>
@@ -5096,8 +5167,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div><label class="fl">Valor (R$) *</label><input id="entrada-valor" type="text" inputmode="numeric" placeholder="0,00"></div>
         <div><label class="fl">Data *</label><input id="entrada-data" type="date"></div>
       </div>
-      <div class="fgf"><label class="fl">Localidade *</label>
-        <select id="entrada-localidade"><option value="">Selecione...</option></select>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label class="fl">Localidade *</label><select id="entrada-localidade"><option value="">Selecione...</option></select></div>
+        <div><label class="fl">Categoria</label><select id="entrada-categoria"><option value="">Selecione...</option></select></div>
       </div>
       <div><label class="fl">Observação</label><input id="entrada-obs" type="text" placeholder="Opcional"></div>
     </div>
@@ -5129,22 +5201,36 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <!-- MODAL LOCALIDADE -->
 <div class="modal-bg" id="modal-localidade">
   <div class="modal" style="max-width:380px">
-    <div class="mh"><div class="mt">📍 Nova localidade</div><button class="mc" onclick="closeModal('modal-localidade')">×</button></div>
+    <div class="mh"><div class="mt" id="modal-localidade-titulo">📍 Nova localidade</div><button class="mc" onclick="closeModal('modal-localidade')">×</button></div>
     <div class="fg">
+      <input type="hidden" id="localidade-edit-id">
       <div class="fgf"><label class="fl">Nome da localidade *</label><input id="localidade-nome" type="text" placeholder="Ex: São Paulo"></div>
     </div>
     <div class="mf"><button class="btn-cancel" onclick="closeModal('modal-localidade')">Cancelar</button><button class="btn-save" onclick="salvarLocalidade()">Salvar</button></div>
   </div>
 </div>
 
-<!-- MODAL CATEGORIA -->
+<!-- MODAL CATEGORIA SAÍDA -->
 <div class="modal-bg" id="modal-categoria">
   <div class="modal" style="max-width:380px">
-    <div class="mh"><div class="mt">🏷️ Nova categoria</div><button class="mc" onclick="closeModal('modal-categoria')">×</button></div>
+    <div class="mh"><div class="mt" id="modal-categoria-titulo">🏷️ Nova categoria de saída</div><button class="mc" onclick="closeModal('modal-categoria')">×</button></div>
     <div class="fg">
+      <input type="hidden" id="categoria-edit-id">
       <div class="fgf"><label class="fl">Nome da categoria *</label><input id="categoria-nome" type="text" placeholder="Ex: Custo de Viagem"></div>
     </div>
     <div class="mf"><button class="btn-cancel" onclick="closeModal('modal-categoria')">Cancelar</button><button class="btn-save" onclick="salvarCategoria()">Salvar</button></div>
+  </div>
+</div>
+
+<!-- MODAL CATEGORIA ENTRADA -->
+<div class="modal-bg" id="modal-cat-entrada">
+  <div class="modal" style="max-width:380px">
+    <div class="mh"><div class="mt" id="modal-cat-entrada-titulo">💰 Nova categoria de entrada</div><button class="mc" onclick="closeModal('modal-cat-entrada')">×</button></div>
+    <div class="fg">
+      <input type="hidden" id="cat-entrada-edit-id">
+      <div class="fgf"><label class="fl">Nome da categoria *</label><input id="cat-entrada-nome" type="text" placeholder="Ex: Faturamento Projeto"></div>
+    </div>
+    <div class="mf"><button class="btn-cancel" onclick="closeModal('modal-cat-entrada')">Cancelar</button><button class="btn-save" onclick="salvarCatEntrada()">Salvar</button></div>
   </div>
 </div>
 
