@@ -58,6 +58,8 @@
       document.getElementById('module-user-label').textContent=uName;
       document.getElementById('user-label').textContent=uName;
       document.getElementById('compras-user-label').textContent=uName;
+      const resUserLabel=document.getElementById('res-user-label');
+      if(resUserLabel) resUserLabel.textContent=uName;
       // Show/hide usuarios tab based on role
       const usuariosTab = document.getElementById('tab-usuarios');
       if (usuariosTab) usuariosTab.style.display = currentUserRole === 'admin' ? 'inline-block' : 'none';
@@ -2103,7 +2105,7 @@
       popularResSelects();
       renderResultados();
       // Show geral tab by default
-      switchResTab('res-geral', document.querySelector('.tab-btn[data-tab="res-geral"]'));
+      switchResTab('res-geral', document.getElementById('res-tab-geral'));
     }
   };
 
@@ -3331,7 +3333,7 @@
         if (!catGroups[cn]) catGroups[cn]=0;
         catGroups[cn]+=(Number(s.valor)||0);
       });
-      return `<div class="res-panel panel" id="res-loc-${loc.id}" style="display:none">
+      return `<div class="panel" id="res-loc-${loc.id}" style="display:none">
         <div class="res-loc-header">
           <div class="res-loc-title">📍 ${loc.nome}</div>
           <div class="res-loc-kpis" style="margin:0">
@@ -3366,7 +3368,7 @@
     const tabsEl = document.getElementById('res-localidade-tabs');
     if (!tabsEl) return;
     tabsEl.innerHTML = resLocalidades.map(loc=>`
-      <button class="tab-btn" data-tab="res-loc-${loc.id}" onclick="switchResTab('res-loc-${loc.id}',this)">📍 ${loc.nome}</button>`).join('');
+      <button class="tab" data-tab="res-loc-${loc.id}" onclick="switchResTab('res-loc-${loc.id}',this)">📍 ${loc.nome}</button>`).join('');
   }
 
   function renderResConfig() {
@@ -3401,9 +3403,14 @@
   }
 
   window.switchResTab = (tabId, btn) => {
-    // Hide all res panels
-    document.querySelectorAll('.res-panel').forEach(p=>p.style.display='none');
-    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    // Hide all res panels - geral, config and dynamic localidade panels
+    ['res-geral','res-config'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el) el.style.display='none';
+    });
+    document.querySelectorAll('#res-localidade-panels .panel').forEach(p=>p.style.display='none');
+    // Remove active from res tabs
+    document.querySelectorAll('#resultados-app .tab').forEach(b=>b.classList.remove('active'));
     const panel = document.getElementById(tabId);
     if (panel) panel.style.display='block';
     if (btn) btn.classList.add('active');
@@ -3563,6 +3570,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .btn-sm:hover{background:#f5f5f0}
 .btn-switch{display:inline-flex;align-items:center;gap:5px;padding:7px 16px;font-size:12px;font-family:inherit;background:var(--av-dark);color:var(--av-yellow);border:2px solid var(--av-yellow);border-radius:20px;cursor:pointer;font-weight:700;transition:all .15s;white-space:nowrap}
 .btn-switch:hover{background:#333;transform:scale(1.03)}
+.btn-modulo{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;font-size:12px;font-family:inherit;background:transparent;color:rgba(255,255,255,.8);border:1.5px solid rgba(255,255,255,.35);border-radius:20px;cursor:pointer;font-weight:600;transition:all .15s;white-space:nowrap}
+.btn-modulo:hover{background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.7)}
 .tabs{display:flex;gap:4px;background:var(--av-dark);border-radius:10px;padding:5px;margin-bottom:1.25rem;flex-wrap:wrap}
 .tab{padding:7px 13px;font-size:12px;border-radius:7px;border:none;background:transparent;color:rgba(255,255,255,.55);cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap;font-weight:500}
 .tab:hover{color:rgba(255,255,255,.85)}
@@ -4011,8 +4020,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .ms-tagline-hl{font-weight:700;opacity:1}
 /* DANGER ZONE */
 /* RESULTADOS */
-.res-panel{padding:16px 20px}
-.res-kpi-grid{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px;padding:14px;background:#fff;border-radius:12px;border:1px solid #ebe9e0}
+.res-kpi-grid{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px;padding:14px 0 20px;border-bottom:2px solid var(--av-yellow)}
 .res-kpi-nav{display:flex;align-items:center;gap:10px;margin-right:8px}
 .res-nav-btn{width:30px;height:30px;border-radius:50%;border:1.5px solid #ddd;background:#fff;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;font-weight:700;transition:all .15s}
 .res-nav-btn:hover{background:#F5C400;border-color:#F5C400}
@@ -4026,14 +4034,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .res-kpi-valor{font-size:18px;font-weight:800;color:#1A1A18}
 .res-section-title{font-size:13px;font-weight:700;color:#1A1A18;border-bottom:2px solid #F5C400;padding-bottom:6px;margin-bottom:12px}
 .res-sub-title{font-size:12px;font-weight:700;color:#555;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em}
-.res-item{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#fff;border-radius:8px;border:1px solid #ebe9e0;margin-bottom:6px}
+.res-item{display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-radius:8px;border:1px solid #ebe9e0;margin-bottom:6px;transition:box-shadow .15s}
+.res-item:hover{box-shadow:0 2px 8px rgba(0,0,0,.06)}
 .res-item-info{flex:1;min-width:0}
 .res-item-desc{font-size:13px;font-weight:600;color:#1A1A18;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .res-item-meta{font-size:10px;color:#999;margin-top:1px}
 .res-item-valor{font-size:13px;font-weight:700;white-space:nowrap;flex-shrink:0}
 .res-item-valor.green{color:#2D6A0A}
 .res-item-valor.red{color:#A32D2D}
-.res-loc-card{background:#fff;border-radius:12px;border:1px solid #ebe9e0;padding:14px 16px;margin-bottom:10px}
+.res-loc-card{background:#fff;border-radius:12px;border:1px solid #ebe9e0;padding:14px 16px;margin-bottom:10px;transition:box-shadow .15s}
+.res-loc-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.08)}
 .res-loc-nome{font-size:14px;font-weight:700;color:#1A1A18;margin-bottom:10px}
 .res-loc-kpis{display:flex;gap:16px;flex-wrap:wrap}
 .res-loc-kpi{display:flex;flex-direction:column;gap:2px}
@@ -4041,8 +4051,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .res-loc-kpi-val{font-size:14px;font-weight:700}
 .res-loc-kpi-val.green{color:#2D6A0A}
 .res-loc-kpi-val.red{color:#A32D2D}
-.res-loc-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;padding-bottom:12px;border-bottom:2px solid #F5C400}
-.res-loc-title{font-size:16px;font-weight:800;color:#1A1A18}
+.res-loc-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid var(--av-yellow)}
+.res-loc-title{font-size:15px;font-weight:800;color:#1A1A18}
 .res-cat-breakdown{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
 .res-cat-item{display:flex;align-items:center;gap:6px;background:#FCEBEB;border-radius:8px;padding:5px 10px;font-size:12px}
 .danger-zone{margin-top:28px;border:2px solid #E24B4A;border-radius:12px;overflow:hidden}
@@ -5013,42 +5023,52 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
 </div>
 <!-- RESULTADOS APP -->
-<div id="resultados-app" style="display:none;min-height:100vh;background:#F8F8F6">
+<div id="resultados-app" style="display:none">
   <div class="header">
     <div class="brand">
-      <svg viewBox="0 0 40 36" width="28" height="25" xmlns="http://www.w3.org/2000/svg"><polygon points="0,0 40,0 20,36" fill="#1A1A18"/></svg>
-      <div><div class="brand-name">Resultados</div><div class="brand-sub">Avante Automação</div></div>
+      <div class="logo-sm"><svg viewBox="0 0 40 36" width="20" height="18" xmlns="http://www.w3.org/2000/svg"><polygon points="0,0 40,0 20,36" fill="#1A1A18"/></svg></div>
+      <div><div class="bn">Avante Automação Industrial</div><div class="bs">Gestão de Resultados</div></div>
     </div>
-    <div style="display:flex;align-items:center;gap:10px">
+    <div class="hright">
+      <div class="user-pill">👤 <span id="res-user-label"></span> <span class="badge-adm">ADM</span></div>
+      <button class="btn-switch" onclick="entrarModulo('propostas')">📋 Propostas</button>
+      <button class="btn-switch" onclick="entrarModulo('compras')">🛒 Compras</button>
       <button class="btn-modulo" onclick="voltarModulos()">← Módulos</button>
+      <button class="btn-sm" onclick="doLogout()">Sair</button>
     </div>
   </div>
-  <div class="tabs-bar">
-    <button class="tab-btn active" data-tab="res-geral" onclick="switchResTab('res-geral',this)">📊 Geral</button>
+
+  <div class="tabs">
+    <button class="tab active" id="res-tab-geral" onclick="switchResTab('res-geral',this)">📊 Geral</button>
     <div id="res-localidade-tabs" style="display:contents"></div>
-    <button class="tab-btn" data-tab="res-config" onclick="switchResTab('res-config',this)">⚙️ Configurações</button>
+    <button class="tab" id="res-tab-config" onclick="switchResTab('res-config',this)">⚙️ Configurações</button>
   </div>
+
   <!-- GERAL -->
-  <div id="res-geral" class="panel res-panel">
+  <div id="res-geral" class="panel">
     <div class="res-kpi-grid" id="res-kpi-geral"></div>
-    <div class="res-section-title">Entradas e Saídas — Mês atual</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
       <div>
-        <div class="res-sub-title">💰 Entradas</div>
+        <div class="sec-header">
+          <div class="sec-title">💰 Entradas do mês</div>
+          <button class="btn-new" onclick="abrirNovaEntrada('')">+ Nova entrada</button>
+        </div>
         <div id="res-entradas-lista-geral"></div>
-        <button class="btn-new" style="margin-top:8px;font-size:12px" onclick="abrirNovaEntrada('')">+ Nova entrada</button>
       </div>
       <div>
-        <div class="res-sub-title">💸 Saídas</div>
+        <div class="sec-header">
+          <div class="sec-title">💸 Saídas do mês</div>
+          <button class="btn-new" onclick="abrirNovaSaida('')">+ Nova saída</button>
+        </div>
         <div id="res-saidas-lista-geral"></div>
-        <button class="btn-new" style="margin-top:8px;font-size:12px" onclick="abrirNovaSaida('')">+ Nova saída</button>
       </div>
     </div>
-    <div class="res-section-title">Por localidade</div>
+    <div class="sec-header" style="margin-top:24px"><div class="sec-title">📍 Resumo por localidade</div></div>
     <div id="res-localidades-cards"></div>
   </div>
+
   <!-- CONFIG -->
-  <div id="res-config" class="panel res-panel" style="display:none">
+  <div id="res-config" class="panel" style="display:none">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
       <div>
         <div class="sec-header"><div class="sec-title">📍 Localidades</div><button class="btn-new" onclick="abrirNovaLocalidade()">+ Nova</button></div>
@@ -5060,6 +5080,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
     </div>
   </div>
+
   <!-- LOCALIDADE PANELS (gerados dinamicamente) -->
   <div id="res-localidade-panels"></div>
 </div>
