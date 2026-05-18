@@ -73,6 +73,11 @@
         const msCards = resCard.closest('.ms-cards');
         if (msCards && currentUserRole === 'admin') msCards.classList.add('has-three');
       }
+      // Show Resultados shortcut buttons in other modules for ADM
+      ['btn-resultados-propostas','btn-resultados-compras'].forEach(id=>{
+        const el = document.getElementById(id);
+        if (el) el.style.display = currentUserRole === 'admin' ? 'inline-flex' : 'none';
+      });
       subscribeAll();
     } else {
       document.getElementById('login-screen').style.display='flex';
@@ -2093,7 +2098,12 @@
       renderCentrosCusto(); renderFornecedores();
     } else if (modulo === 'resultados') {
       if (resApp) resApp.style.display='block';
+      renderResLocalidadeTabs();
+      renderResConfig();
+      popularResSelects();
       renderResultados();
+      // Show geral tab by default
+      switchResTab('res-geral', document.querySelector('.tab-btn[data-tab="res-geral"]'));
     }
   };
 
@@ -3197,7 +3207,8 @@
       renderResLocalidadeTabs();
       renderResConfig();
       popularResSelects();
-      if (document.getElementById('resultados-app')?.style.display==='block') renderResultados();
+      const rApp = document.getElementById('resultados-app');
+      if (rApp && rApp.style.display==='block') renderResultados();
     });
     onSnapshot(query(collection(db,'resCategorias'),orderBy('nome')), snap=>{
       resCategorias = snap.docs.map(d=>({id:d.id,...d.data()}));
@@ -3209,11 +3220,13 @@
     });
     onSnapshot(query(collection(db,'resEntradas'),orderBy('data','desc')), snap=>{
       resEntradas = snap.docs.map(d=>({id:d.id,...d.data()}));
-      if (document.getElementById('resultados-app')?.style.display==='block') renderResultados();
+      const rApp = document.getElementById('resultados-app');
+      if (rApp && rApp.style.display==='block') renderResultados();
     });
     onSnapshot(query(collection(db,'resSaidas'),orderBy('data','desc')), snap=>{
       resSaidas = snap.docs.map(d=>({id:d.id,...d.data()}));
-      if (document.getElementById('resultados-app')?.style.display==='block') renderResultados();
+      const rApp = document.getElementById('resultados-app');
+      if (rApp && rApp.style.display==='block') renderResultados();
     });
   }
 
@@ -4348,7 +4361,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <div class="hright">
       <div class="user-pill">👤 <span id="compras-user-label"></span></div>
+      <button class="btn-modulo" onclick="voltarModulos()">← Módulos</button>
       <button class="btn-switch" onclick="entrarModulo('propostas')" title="Ir para Gestão de Propostas">📋 Propostas</button>
+      <button class="btn-switch btn-resultados-switch" id="btn-resultados-compras" onclick="entrarModulo('resultados')" style="display:none">📊 Resultados</button>
       <button class="btn-sm" onclick="doLogout()">Sair</button>
     </div>
   </div>
@@ -4386,7 +4401,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div id="main-app">
   <div class="header">
     <div class="brand"><div class="logo-sm"><svg viewBox="0 0 40 36" width="20" height="18" xmlns="http://www.w3.org/2000/svg"><polygon points="0,0 40,0 20,36" fill="#1A1A18"/></svg></div><div><div class="bn">Avante Automação Industrial</div><div class="bs">Gestão de Propostas Comerciais</div></div></div>
-    <div class="hright"><div class="user-pill">👤 <span id="user-label"></span> <span class="badge-adm" id="role-badge">ADM</span></div><button class="btn-switch" onclick="entrarModulo('compras')">🛒 Compras</button><button class="btn-sm" onclick="doLogout()">Sair</button></div>
+    <div class="hright"><div class="user-pill">👤 <span id="user-label"></span> <span class="badge-adm" id="role-badge">ADM</span></div><button class="btn-modulo" onclick="voltarModulos()">← Módulos</button><button class="btn-switch" onclick="entrarModulo('compras')">🛒 Compras</button><button class="btn-switch btn-resultados-switch" id="btn-resultados-propostas" onclick="entrarModulo('resultados')" style="display:none">📊 Resultados</button><button class="btn-sm" onclick="doLogout()">Sair</button></div>
   </div>
   <div class="tabs">
     <button class="tab active" onclick="showPanel('dashboard',this)">Dashboard</button>
