@@ -3309,15 +3309,21 @@
     if (!el) return;
     const filtered = locId ? items.filter(x=>x.localidade===locId) : items;
     if (!filtered.length) { el.innerHTML='<div class="empty" style="font-size:12px;padding:8px">Nenhum registro</div>'; return; }
-    el.innerHTML = filtered.map(x=>`
-      <div class="res-item">
+    el.innerHTML = filtered.map(x=>{
+      const locNome = resLocalidades.find(l=>l.id===x.localidade)?.nome||'';
+      const catNome = tipo==='entrada'
+        ? (resCatEntradas.find(c=>c.id===x.categoria)?.nome||'')
+        : getCatNome(x.categoria);
+      const meta = [x.data||'', locNome, catNome, x.obs||''].filter(Boolean).join(' · ');
+      return `<div class="res-item">
         <div class="res-item-info">
-          <div class="res-item-desc">${x.descricao}</div>
-          <div class="res-item-meta">${x.data||''} ${x.categoria?'· '+getCatNome(x.categoria):''} ${x.obs?'· '+x.obs:''}</div>
+          <div class="res-item-meta">${meta}</div>
         </div>
         <div class="res-item-valor ${tipo==='entrada'?'green':'red'}">${fmtMoeda(x.valor)}</div>
+        <button class="btn-sm" style="margin-left:4px" onclick="editarRes${tipo==='entrada'?'Entrada':'Saida'}('${x.id}')">✎</button>
         <button class="card-btn del" onclick="excluirRes${tipo==='entrada'?'Entrada':'Saida'}('${x.id}')">✕</button>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }
 
   function getCatNome(catId) {
@@ -3449,6 +3455,14 @@
     }
   };
 
+  window.toggleResumoLoc = (header) => {
+    const cards = document.getElementById('res-localidades-cards');
+    const chevron = document.getElementById('resumo-loc-chevron');
+    const open = cards.style.display !== 'none';
+    cards.style.display = open ? 'none' : 'block';
+    chevron.textContent = open ? '▶ mostrar' : '▼ ocultar';
+  };
+
   window.mudarMesRes = (dir) => {
     resMesAtual += dir;
     if (resMesAtual < 0) { resMesAtual = 11; resAnoAtual--; }
@@ -3527,6 +3541,36 @@
     if (!confirm('Excluir esta saída?')) return;
     await deleteDoc(doc(db,'resSaidas',id));
     showToast('Saída removida.');
+  };
+
+  window.editarResEntrada = (id) => {
+    const x = resEntradas.find(e=>e.id===id);
+    if (!x) return;
+    document.getElementById('entrada-id').value = id;
+    document.getElementById('entrada-desc').value = x.descricao||'';
+    popularResSelects();
+    document.getElementById('entrada-valor').value = (Number(x.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+    document.getElementById('entrada-data').value = x.data||'';
+    document.getElementById('entrada-localidade').value = x.localidade||'';
+    document.getElementById('entrada-categoria').value = x.categoria||'';
+    document.getElementById('entrada-obs').value = x.obs||'';
+    document.getElementById('modal-entrada').classList.add('open');
+    applyValorMask(document.getElementById('entrada-valor'));
+  };
+
+  window.editarResSaida = (id) => {
+    const x = resSaidas.find(e=>e.id===id);
+    if (!x) return;
+    document.getElementById('saida-id').value = id;
+    document.getElementById('saida-desc').value = x.descricao||'';
+    popularResSelects();
+    document.getElementById('saida-valor').value = (Number(x.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+    document.getElementById('saida-data').value = x.data||'';
+    document.getElementById('saida-localidade').value = x.localidade||'';
+    document.getElementById('saida-categoria').value = x.categoria||'';
+    document.getElementById('saida-obs').value = x.obs||'';
+    document.getElementById('modal-saida').classList.add('open');
+    applyValorMask(document.getElementById('saida-valor'));
   };
 
   // --- LOCALIDADE CRUD ---
@@ -5151,8 +5195,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div id="res-saidas-lista-geral"></div>
       </div>
     </div>
-    <div class="sec-header" style="margin-top:24px"><div class="sec-title">📍 Resumo por localidade</div></div>
-    <div id="res-localidades-cards"></div>
+    <div class="sec-header" style="margin-top:24px;cursor:pointer" onclick="toggleResumoLoc(this)">
+      <div class="sec-title">📍 Resumo por localidade <span id="resumo-loc-chevron" style="font-size:12px;margin-left:6px">▶ mostrar</span></div>
+    </div>
+    <div id="res-localidades-cards" style="display:none"></div>
   </div>
 
   <!-- CONFIG -->
