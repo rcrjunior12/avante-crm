@@ -3320,8 +3320,8 @@
           <div class="res-item-meta">${meta}</div>
         </div>
         <div class="res-item-valor ${tipo==='entrada'?'green':'red'}">${fmtMoeda(x.valor)}</div>
-        <button class="btn-sm" style="margin-left:4px" onclick="editarRes${tipo==='entrada'?'Entrada':'Saida'}('${x.id}')">✎</button>
-        <button class="card-btn del" onclick="excluirRes${tipo==='entrada'?'Entrada':'Saida'}('${x.id}')">✕</button>
+        <button class="btn-sm" style="margin-left:4px;padding:5px 9px" title="Editar" onclick="editarRes${tipo==='entrada'?'Entrada':'Saida'}('${x.id}')">✎</button>
+        <button class="btn-sm" style="margin-left:4px;padding:5px 9px;background:#fee2e2;color:#dc2626;border-color:#fca5a5" title="Excluir" onclick="excluirRes${tipo==='entrada'?'Entrada':'Saida'}('${x.id}')">🗑</button>
       </div>`;
     }).join('');
   }
