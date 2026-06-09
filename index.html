@@ -28,8 +28,8 @@
   const db = getFirestore(app);
   const storage = getStorage(app);
 
-  const STAGES = ['Prospecção / Contato inicial','Levantamento técnico','Elaboração do escopo','Precificação','Aguardando feedback','Negociação','Fechado / Ganho','Perdido'];
-  const STAGE_SHORT = ['Prospecção','Levantamento','Elab. Escopo','Precificação','Ag. Feedback','Negociação','Ganho','Perdido'];
+  const STAGES = ['Prospecção / Contato inicial','Levantamento técnico','Elaboração do escopo','Precificação','Acompanhamento','Negociação','Fechado / Ganho','Perdido'];
+  const STAGE_SHORT = ['Prospecção','Levantamento','Elab. Escopo','Precificação','Acompanhamento','Negociação','Ganho','Perdido'];
   const DOTS = ['#888780','#F5C400','#7F77DD','#EF9F27','#5DCAA5','#D4537E','#639922','#E24B4A'];
   const TIPOS_PRODUTO = ['Serviços de Automação','Painel Elétrico','Serviço de Instalação Elétrica'];
   const CORES_PRODUTO = {'Serviços de Automação':'#7F77DD','Painel Elétrico':'#378ADD','Serviço de Instalação Elétrica':'#EF9F27'};
@@ -565,6 +565,12 @@
 
   window.marcarLida=async(id,lida)=>{await updateDoc(doc(db,'alertas',id),{lida:!lida});};
 
+  window.excluirAlerta=async(id)=>{
+    if(!confirm('Apagar este alerta permanentemente?')) return;
+    await deleteDoc(doc(db,'alertas',id));
+    showToast('Alerta apagado.');
+  };
+
   window.abrirConcluirAlerta=(id)=>{
     document.getElementById('ac-id').value=id;
     document.getElementById('ac-comentario').value='';
@@ -763,6 +769,7 @@
           <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end">
             <span class="abadge ${a.lida?'lida':'nova'}" onclick="marcarLida('${a.id}',${a.lida})">${a.lida?'Lida':'Nova'}</span>
             <button class="alert-done-btn" onclick="abrirConcluirAlerta('${a.id}')">✓ Feito</button>
+            <button class="btn-sm" style="padding:4px 8px;background:#fee2e2;color:#dc2626;border-color:#fca5a5;font-size:11px" onclick="excluirAlerta('${a.id}')" title="Apagar alerta">🗑</button>
           </div>
         </div>`;
       }).join('');
@@ -784,6 +791,7 @@
               <div class="atime">Concluído: ${a.feitoEm||''}</div>
             </div>
             <span class="abadge lida">Feito</span>
+            <button class="btn-sm" style="padding:4px 8px;background:#fee2e2;color:#dc2626;border-color:#fca5a5;font-size:11px;margin-top:4px" onclick="excluirAlerta('${a.id}')" title="Apagar alerta">🗑</button>
           </div>`).join('');
       }
     }
@@ -804,6 +812,7 @@
               <div class="atime">Concluído: ${a.feitoEm||''}</div>
             </div>
             <span class="abadge lida" style="background:#e0e0e0;color:#666">Arquivado</span>
+            <button class="btn-sm" style="padding:4px 8px;background:#fee2e2;color:#dc2626;border-color:#fca5a5;font-size:11px;margin-top:4px" onclick="excluirAlerta('${a.id}')" title="Apagar alerta">🗑</button>
           </div>`).join('');
       }
     }
@@ -989,7 +998,7 @@
 
     // Gráfico etapas: apenas Ag.Feedback(4), Negociação(5), Ganho(6), Perdido(7)
     const etapasVisiveis = [4,5,6,7];
-    const etapasLabels = ['Ag. Feedback','Negociação','Ganho','Perdido'];
+    const etapasLabels = ['Acompanhamento','Negociação','Ganho','Perdido'];
     const etapasCores = [DOTS[4],DOTS[5],DOTS[6],DOTS[7]];
     const etapasCounts = etapasVisiveis.map(i=>propostas.filter(p=>Number(p.etapa)===i&&!p.arquivada).length);
     // For ganho/perdido, include arquivada too (historical)
@@ -1850,8 +1859,36 @@
   function renderCompradores() {
     const list = document.getElementById('compradores-list');
     if (!list) return;
-    if (!compradores.length) { list.innerHTML='<div class="empty">Nenhum comprador cadastrado.</div>'; return; }
-    list.innerHTML = compradores.map(comp => {
+
+    // Popular filtro de clientes
+    const filtroSel = document.getElementById('comp-filtro-cliente');
+    if (filtroSel) {
+      const valAtual = filtroSel.value;
+      const clientesUsados = [...new Set(compradores.flatMap(c =>
+        c.clientes?.length ? c.clientes.map(cl=>JSON.stringify({id:cl.id||'',nome:cl.nome||''}))
+        : c.clienteNome ? [JSON.stringify({id:c.clienteId||'',nome:c.clienteNome})]
+        : []
+      ))].map(s=>JSON.parse(s)).filter((v,i,a)=>a.findIndex(x=>x.nome===v.nome)===i)
+        .sort((a,b)=>a.nome.localeCompare(b.nome));
+      filtroSel.innerHTML = '<option value="">Todos os clientes</option>' +
+        clientesUsados.map(cl=>`<option value="${cl.nome}">${cl.nome}</option>`).join('');
+      filtroSel.value = valAtual;
+    }
+
+    const filtroCliente = filtroSel?.value || '';
+
+    // Filtrar compradores pelo cliente selecionado
+    let listaFiltrada = compradores;
+    if (filtroCliente) {
+      listaFiltrada = compradores.filter(comp => {
+        const cliList = comp.clientes?.length ? comp.clientes
+          : comp.clienteNome ? [{nome:comp.clienteNome}] : [];
+        return cliList.some(cl => cl.nome === filtroCliente);
+      });
+    }
+
+    if (!listaFiltrada.length) { list.innerHTML='<div class="empty">Nenhum comprador encontrado.</div>'; return; }
+    list.innerHTML = listaFiltrada.map(comp => {
       // Get all client names (new multi or legacy)
       const cliList = comp.clientes?.length ? comp.clientes
         : comp.clienteNome ? [{id:comp.clienteId||'',nome:comp.clienteNome,unidade:comp.unidade||''}]
@@ -4649,7 +4686,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
   <div class="metrics">
     <div class="metric"><div class="mlabel">Total propostas</div><div class="mval blue" id="m-total">0</div></div>
-    <div class="metric"><div class="mlabel">R$ Ag. Feedback</div><div class="mval amber" id="m-feed">R$ 0</div></div>
+    <div class="metric"><div class="mlabel">R$ Acompanhamento</div><div class="mval amber" id="m-feed">R$ 0</div></div>
     <div class="metric"><div class="mlabel">R$ Negociação</div><div class="mval amber" id="m-neg">R$ 0</div></div>
     <div class="metric"><div class="mlabel">Ganho mês (R$)</div><div class="mval green" id="m-ganho">R$ 0</div></div>
     <div class="metric"><div class="mlabel">Valor em aberto</div><div class="mval blue" id="m-valor">R$ 0</div></div>
@@ -4759,6 +4796,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <!-- Sub-panel: lista -->
     <div id="comp-subpanel-lista">
+      <div style="margin-bottom:12px">
+        <select id="comp-filtro-cliente" onchange="renderCompradores()" style="font-size:13px;padding:7px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;font-family:inherit;min-width:220px">
+          <option value="">Todos os clientes</option>
+        </select>
+      </div>
       <div id="compradores-list"></div>
     </div>
     <!-- Sub-panel: propostas por comprador -->
