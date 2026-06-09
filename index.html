@@ -643,20 +643,12 @@
     const board=document.getElementById('kanban-board');board.innerHTML='';
     const hoje=new Date().toISOString().split('T')[0];
 
-    // Popular filtro de clientes (sem sobrescrever seleção do usuário)
+    // Popular filtro de clientes
     const filtroSel=document.getElementById('funil-filtro-cliente');
     if(filtroSel){
-      const clientesMap={};
-      propostas.filter(p=>!p.arquivada&&p.cliente).forEach(p=>{
-        if(!clientesMap[p.cliente]){
-          const cl=clientes.find(x=>x.nome===p.cliente);
-          clientesMap[p.cliente]=cl?.unidade?`${p.cliente} — ${cl.unidade}`:p.cliente;
-        }
-      });
-      const clientesOrdenados=Object.keys(clientesMap).sort((a,b)=>clientesMap[a].localeCompare(clientesMap[b]));
+      const nomes=[...new Set(propostas.filter(p=>!p.arquivada&&p.cliente).map(p=>p.cliente))].sort();
       filtroSel.innerHTML='<option value="">Todos os clientes</option>'+
-        clientesOrdenados.map(nome=>`<option value="${nome}">${clientesMap[nome]}</option>`).join('');
-      // Restaura a seleção da variável global (não do DOM que acabou de ser recriado)
+        nomes.map(n=>`<option value="${n}">${n}</option>`).join('');
       if(_funilFiltroCliente) filtroSel.value=_funilFiltroCliente;
     }
     const filtroCliente=_funilFiltroCliente;
