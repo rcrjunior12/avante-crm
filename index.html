@@ -638,7 +638,7 @@
     document.getElementById('m-valor').textContent='R$ '+va.toLocaleString('pt-BR');
   }
 
-  function renderKanban(){
+  window.renderKanban = function renderKanban(){
     updateMetrics();
     const board=document.getElementById('kanban-board');board.innerHTML='';
     const hoje=new Date().toISOString().split('T')[0];
