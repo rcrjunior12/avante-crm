@@ -646,9 +646,13 @@
     // Popular filtro de clientes
     const filtroSel=document.getElementById('funil-filtro-cliente');
     if(filtroSel){
+      // p.cliente guarda só o nome (ex: "Aché"), busca unidade para exibição
       const nomes=[...new Set(propostas.filter(p=>!p.arquivada&&p.cliente).map(p=>p.cliente))].sort();
-      filtroSel.innerHTML='<option value="">Todos os clientes</option>'+
-        nomes.map(n=>`<option value="${n}">${n}</option>`).join('');
+      filtroSel.innerHTML='<option value="">Todos os clientes</option>'+nomes.map(n=>{
+        const cl=clientes.find(x=>x.nome===n);
+        const label=cl?.unidade?`${n} — ${cl.unidade}`:n;
+        return `<option value="${n}">${label}</option>`;
+      }).join('');
       if(_funilFiltroCliente) filtroSel.value=_funilFiltroCliente;
     }
     const filtroCliente=_funilFiltroCliente;
