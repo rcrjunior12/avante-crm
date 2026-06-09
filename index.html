@@ -121,8 +121,10 @@
       if (etapa !== 6 && etapa !== 7) return false;
       if (p.arquivada) return false; // already archived
       const mes = p.mesGanho || p.mesPerdido || '';
-      // Archive if from a previous month (or no month recorded = old data, archive it)
-      return mes !== mesAtualKey;
+      // Only archive if mes is recorded AND is strictly from a previous month
+      // Proposals without mesGanho/mesPerdido are kept visible (safe fallback)
+      if (!mes) return false;
+      return mes < mesAtualKey;
     });
     for (const p of paraArquivar) {
       await updateDoc(doc(db, 'propostas', p.id), { arquivada: true });
@@ -540,9 +542,27 @@
   window.salvarAlerta=async()=>{
     const titulo=document.getElementById('a-titulo').value.trim();
     if(!titulo){showToast('Preencha o título.');return;}
-    await addDoc(collection(db,'alertas'),{titulo,desc:document.getElementById('a-desc').value,tipo:document.getElementById('a-tipo').value,data:document.getElementById('a-data').value,lida:false,criadoEm:serverTimestamp()});
-    closeModal('modal-alerta');['a-titulo','a-desc','a-data'].forEach(id=>document.getElementById(id).value='');showToast('Alerta criado!');
+    const responsavelId=document.getElementById('a-responsavel').value;
+    const responsavelNome=responsavelId ? (usuarios.find(u=>u.id===responsavelId)?.nome||'') : '';
+    await addDoc(collection(db,'alertas'),{titulo,desc:document.getElementById('a-desc').value,tipo:document.getElementById('a-tipo').value,data:document.getElementById('a-data').value,lida:false,responsavelId,responsavelNome,criadoEm:serverTimestamp()});
+    closeModal('modal-alerta');['a-titulo','a-desc','a-data'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('a-responsavel').value='';
+    showToast('Alerta criado!');
   };
+
+  function popularResponsaveisAlerta(){
+    const sel=document.getElementById('a-responsavel');
+    if(!sel)return;
+    const atual=sel.value;
+    sel.innerHTML='<option value="">— Selecione o responsável —</option>'+
+      usuarios.map(u=>`<option value="${u.id}">${u.nome}</option>`).join('');
+    sel.value=atual;
+  }
+  window.abrirModalAlerta=()=>{
+    popularResponsaveisAlerta();
+    openModal('modal-alerta');
+  };
+
   window.marcarLida=async(id,lida)=>{await updateDoc(doc(db,'alertas',id),{lida:!lida});};
 
   window.abrirConcluirAlerta=(id)=>{
@@ -688,16 +708,48 @@
   function renderAlertas(){
     const listPend=document.getElementById('alerts-list');
     const listFeito=document.getElementById('alerts-hist-list');
+    const listArquivo=document.getElementById('alerts-arquivo-list');
     const icons={warn:'⚠',info:'ℹ',danger:'🚨'};
     const hoje=new Date().toISOString().split('T')[0];
-    const pendentes=alertas.filter(a=>!a.feito);
-    const feitos=alertas.filter(a=>a.feito);
+    const filtroUser=document.getElementById('alerta-filtro-usuario')?.value||'';
 
+    // Popular filtro de usuários
+    const filtroSel=document.getElementById('alerta-filtro-usuario');
+    if(filtroSel){
+      const valAtual=filtroSel.value;
+      filtroSel.innerHTML='<option value="">Todos os responsáveis</option>'+
+        usuarios.map(u=>`<option value="${u.id}">${u.nome}</option>`).join('');
+      filtroSel.value=valAtual;
+    }
+
+    // Separar pendentes / feitos recentes (<=10 dias) / arquivo (>10 dias)
+    const agora=new Date();
+    const limite10=new Date(agora); limite10.setDate(limite10.getDate()-10);
+
+    let pendentes=alertas.filter(a=>!a.feito);
+    let feitosRecentes=alertas.filter(a=>{
+      if(!a.feito) return false;
+      const feitoDate=parseFeitoEm(a.feitoEm);
+      return feitoDate && feitoDate >= limite10;
+    });
+    let feitosAntigos=alertas.filter(a=>{
+      if(!a.feito) return false;
+      const feitoDate=parseFeitoEm(a.feitoEm);
+      return !feitoDate || feitoDate < limite10;
+    });
+
+    // Aplicar filtro por responsável
+    if(filtroUser){
+      pendentes=pendentes.filter(a=>a.responsavelId===filtroUser);
+      feitosRecentes=feitosRecentes.filter(a=>a.responsavelId===filtroUser);
+      feitosAntigos=feitosAntigos.filter(a=>a.responsavelId===filtroUser);
+    }
+
+    // Renderizar pendentes
     if(!pendentes.length){
       listPend.innerHTML='<div class="empty">Nenhum alerta pendente.</div>';
     } else {
       listPend.innerHTML=pendentes.map(a=>{
-        // check if data is today
         const dataAlerta=(a.data||'').split('T')[0];
         const isHoje=dataAlerta===hoje;
         return `<div class="alert-card ${isHoje?'alert-hoje':''}">
@@ -705,6 +757,7 @@
           <div class="abody">
             <div class="atitle">${a.titulo}</div>
             <div class="adesc">${a.desc||''}</div>
+            ${a.responsavelNome?`<div class="atime" style="color:#6c63ff;font-weight:600">👤 ${a.responsavelNome}</div>`:''}
             <div class="atime">${(a.data||'').replace('T',' ')}${isHoje?'<span class="alert-hoje-badge">HOJE</span>':''}</div>
           </div>
           <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end">
@@ -715,16 +768,18 @@
       }).join('');
     }
 
+    // Renderizar histórico recente (<=10 dias)
     if(listFeito){
-      if(!feitos.length){
-        listFeito.innerHTML='<div class="empty">Nenhum alerta concluído ainda.</div>';
+      if(!feitosRecentes.length){
+        listFeito.innerHTML='<div class="empty">Nenhum alerta concluído nos últimos 10 dias.</div>';
       } else {
-        listFeito.innerHTML=feitos.map(a=>`
+        listFeito.innerHTML=feitosRecentes.map(a=>`
           <div class="alert-card alert-feito-card">
             <div class="aicon info" style="background:#eafaf4">✅</div>
             <div class="abody">
               <div class="atitle" style="text-decoration:line-through;opacity:.6">${a.titulo}</div>
               <div class="adesc">${a.desc||''}</div>
+              ${a.responsavelNome?`<div class="atime" style="color:#6c63ff;font-weight:600">👤 ${a.responsavelNome}</div>`:''}
               ${a.comentarioConclusao?`<div class="alert-comentario">💬 ${a.comentarioConclusao}</div>`:''}
               <div class="atime">Concluído: ${a.feitoEm||''}</div>
             </div>
@@ -732,6 +787,35 @@
           </div>`).join('');
       }
     }
+
+    // Renderizar arquivo histórico (>10 dias)
+    if(listArquivo){
+      if(!feitosAntigos.length){
+        listArquivo.innerHTML='<div class="empty">Nenhum alerta no histórico.</div>';
+      } else {
+        listArquivo.innerHTML=feitosAntigos.map(a=>`
+          <div class="alert-card alert-feito-card" style="opacity:.75">
+            <div class="aicon info" style="background:#f0f0f0">🗂️</div>
+            <div class="abody">
+              <div class="atitle" style="text-decoration:line-through;opacity:.5">${a.titulo}</div>
+              <div class="adesc">${a.desc||''}</div>
+              ${a.responsavelNome?`<div class="atime" style="color:#6c63ff;font-weight:600">👤 ${a.responsavelNome}</div>`:''}
+              ${a.comentarioConclusao?`<div class="alert-comentario">💬 ${a.comentarioConclusao}</div>`:''}
+              <div class="atime">Concluído: ${a.feitoEm||''}</div>
+            </div>
+            <span class="abadge lida" style="background:#e0e0e0;color:#666">Arquivado</span>
+          </div>`).join('');
+      }
+    }
+  }
+
+  function parseFeitoEm(str){
+    if(!str) return null;
+    // formato dd/mm/yyyy hh:mm ou dd/mm/yyyy
+    const p=str.split(' ');
+    const d=p[0].split('/');
+    if(d.length!==3) return null;
+    return new Date(parseInt(d[2]),parseInt(d[1])-1,parseInt(d[0]));
   }
   function renderFeedbacks(){
     const list=document.getElementById('feedback-list');
@@ -1342,6 +1426,11 @@
     document.getElementById('detalhe-hist-sub').textContent = (p.cliente||'') + (f.dataAgenda ? ' — ' + formatDateBR(f.dataAgenda) : '');
     document.getElementById('detalhe-hist-timeline').innerHTML = timelineHtml || '<div class="empty">Sem detalhes registrados.</div>';
     document.getElementById('modal-detalhe-hist').classList.add('open');
+  };
+
+  window.toggleAlertaArquivo = () => {
+    const body = document.getElementById('alerta-arquivo-body');
+    if(body) body.style.display = body.style.display==='none' ? 'block' : 'none';
   };
 
   window.toggleAlertaHist = () => {
@@ -4618,15 +4707,32 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="chart-row" id="chart-area"></div>
   </div>
   <div id="panel-alertas" class="panel">
-    <div class="sec-header"><div class="sec-title">Alertas pendentes</div><button class="btn-new" onclick="openModal('modal-alerta')">+ Novo alerta</button></div>
+    <div class="sec-header">
+      <div class="sec-title">Alertas pendentes</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="alerta-filtro-usuario" onchange="renderAlertas()" style="font-size:12px;padding:5px 10px;border-radius:8px;border:1px solid #ddd;background:#fff;font-family:inherit">
+          <option value="">Todos os responsáveis</option>
+        </select>
+        <button class="btn-new" onclick="abrirModalAlerta()">+ Novo alerta</button>
+      </div>
+    </div>
     <div class="alerts-list" id="alerts-list"></div>
-    <div class="alerta-hist-section">
+    <div class="alerta-hist-section" style="margin-top:20px">
       <div class="alerta-hist-header" onclick="toggleAlertaHist()">
-        <div class="sec-title" style="margin:0">✅ Alertas concluídos</div>
+        <div class="sec-title" style="margin:0">✅ Alertas concluídos (últimos 10 dias)</div>
         <button class="hist-agenda-toggle">Mostrar / Ocultar</button>
       </div>
       <div id="alerta-hist-body" style="display:none">
         <div class="alerts-list" id="alerts-hist-list" style="margin-top:10px"></div>
+      </div>
+    </div>
+    <div class="alerta-hist-section" id="alerta-arquivo-section" style="margin-top:16px">
+      <div class="alerta-hist-header" onclick="toggleAlertaArquivo()">
+        <div class="sec-title" style="margin:0">🗂️ Histórico de alertas executados</div>
+        <button class="hist-agenda-toggle">Mostrar / Ocultar</button>
+      </div>
+      <div id="alerta-arquivo-body" style="display:none">
+        <div class="alerts-list" id="alerts-arquivo-list" style="margin-top:10px"></div>
       </div>
     </div>
   </div>
@@ -4881,6 +4987,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="fgf"><label class="fl">Descrição</label><textarea id="a-desc" placeholder="Detalhes para a vendedora..."></textarea></div>
       <div><label class="fl">Tipo</label><select id="a-tipo"><option value="warn">Atenção</option><option value="info">Informação</option><option value="danger">Urgente</option></select></div>
       <div><label class="fl">Data/hora</label><input id="a-data" type="datetime-local"></div>
+      <div><label class="fl">Responsável</label><select id="a-responsavel"><option value="">— Selecione o responsável —</option></select></div>
     </div>
     <div class="mf"><button class="btn-cancel" onclick="closeModal('modal-alerta')">Cancelar</button><button class="btn-save" onclick="salvarAlerta()">Criar</button></div>
   </div>
