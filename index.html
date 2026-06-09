@@ -646,10 +646,19 @@
     const filtroSel=document.getElementById('funil-filtro-cliente');
     if(filtroSel){
       const valAtual=filtroSel.value;
-      const clientesAtivos=[...new Set(propostas.filter(p=>!p.arquivada).map(p=>p.cliente).filter(Boolean))].sort();
+      // Gera lista única de clientes com unidade para exibição, usando nome como value
+      const clientesMap={};
+      propostas.filter(p=>!p.arquivada&&p.cliente).forEach(p=>{
+        if(!clientesMap[p.cliente]){
+          const cl=clientes.find(x=>x.nome===p.cliente);
+          clientesMap[p.cliente]=cl?.unidade?`${p.cliente} — ${cl.unidade}`:p.cliente;
+        }
+      });
+      const clientesOrdenados=Object.keys(clientesMap).sort((a,b)=>clientesMap[a].localeCompare(clientesMap[b]));
       filtroSel.innerHTML='<option value="">Todos os clientes</option>'+
-        clientesAtivos.map(c=>`<option value="${c}">${c}</option>`).join('');
-      filtroSel.value=valAtual;
+        clientesOrdenados.map(nome=>`<option value="${nome}">${clientesMap[nome]}</option>`).join('');
+      // Restaura valor selecionado
+      if(valAtual && filtroSel.querySelector(`option[value="${valAtual}"]`)) filtroSel.value=valAtual;
     }
     const filtroCliente=filtroSel?.value||'';
 
