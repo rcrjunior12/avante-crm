@@ -641,8 +641,20 @@
     updateMetrics();
     const board=document.getElementById('kanban-board');board.innerHTML='';
     const hoje=new Date().toISOString().split('T')[0];
+
+    // Popular filtro de clientes
+    const filtroSel=document.getElementById('funil-filtro-cliente');
+    if(filtroSel){
+      const valAtual=filtroSel.value;
+      const clientesAtivos=[...new Set(propostas.filter(p=>!p.arquivada).map(p=>p.cliente).filter(Boolean))].sort();
+      filtroSel.innerHTML='<option value="">Todos os clientes</option>'+
+        clientesAtivos.map(c=>`<option value="${c}">${c}</option>`).join('');
+      filtroSel.value=valAtual;
+    }
+    const filtroCliente=filtroSel?.value||'';
+
     STAGE_SHORT.forEach((label,si)=>{
-      const cards=propostas.filter(p=>Number(p.etapa)===si&&!p.arquivada);
+      const cards=propostas.filter(p=>Number(p.etapa)===si&&!p.arquivada&&(!filtroCliente||p.cliente===filtroCliente));
       const col=document.createElement('div');col.className='stage';col.dataset.stage=si;
       col.addEventListener('dragover',e=>{e.preventDefault();col.classList.add('drag-over');});
       col.addEventListener('dragleave',()=>col.classList.remove('drag-over'));
@@ -5103,7 +5115,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="dashboard-area"></div>
   </div>
   <div id="panel-funil" class="panel">
-    <div class="sec-header"><div class="sec-title">Propostas por etapa — arraste para mover</div><div class="action-group"><button class="btn-export" onclick="exportCSV()">Exportar CSV</button><button class="btn-new" onclick="openModal('modal-proposta')">+ Nova proposta</button></div></div>
+    <div class="sec-header">
+      <div class="sec-title">Propostas por etapa — arraste para mover</div>
+      <div class="action-group" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <select id="funil-filtro-cliente" onchange="renderKanban()" style="font-size:12px;padding:6px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;font-family:inherit;min-width:180px">
+          <option value="">Todos os clientes</option>
+        </select>
+        <button class="btn-export" onclick="exportCSV()">Exportar CSV</button>
+        <button class="btn-new" onclick="openModal('modal-proposta')">+ Nova proposta</button>
+      </div>
+    </div>
     <div class="kanban-wrap"><div class="kanban" id="kanban-board"></div></div>
     <div class="agenda-wrap">
       <div class="agenda-title-row">
