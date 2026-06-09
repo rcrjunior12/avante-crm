@@ -35,6 +35,7 @@
   const CORES_PRODUTO = {'Serviços de Automação':'#7F77DD','Painel Elétrico':'#378ADD','Serviço de Instalação Elétrica':'#EF9F27'};
 
   let propostas=[], alertas=[], feedbacks=[], clientes=[], usuarios=[], compradores=[], centrosCusto=[], fornecedores=[];
+  let _funilFiltroCliente = '';
   let unsubCentrosCusto, unsubFornecedores;
   let currentModule = 'propostas';
   let editIdx=null, delId=null, dragId=null, editClienteId=null, delClienteId=null;
@@ -642,11 +643,9 @@
     const board=document.getElementById('kanban-board');board.innerHTML='';
     const hoje=new Date().toISOString().split('T')[0];
 
-    // Popular filtro de clientes
+    // Popular filtro de clientes (sem sobrescrever seleção do usuário)
     const filtroSel=document.getElementById('funil-filtro-cliente');
     if(filtroSel){
-      const valAtual=filtroSel.value;
-      // Gera lista única de clientes com unidade para exibição, usando nome como value
       const clientesMap={};
       propostas.filter(p=>!p.arquivada&&p.cliente).forEach(p=>{
         if(!clientesMap[p.cliente]){
@@ -657,10 +656,10 @@
       const clientesOrdenados=Object.keys(clientesMap).sort((a,b)=>clientesMap[a].localeCompare(clientesMap[b]));
       filtroSel.innerHTML='<option value="">Todos os clientes</option>'+
         clientesOrdenados.map(nome=>`<option value="${nome}">${clientesMap[nome]}</option>`).join('');
-      // Restaura valor selecionado
-      if(valAtual && filtroSel.querySelector(`option[value="${valAtual}"]`)) filtroSel.value=valAtual;
+      // Restaura a seleção da variável global (não do DOM que acabou de ser recriado)
+      if(_funilFiltroCliente) filtroSel.value=_funilFiltroCliente;
     }
-    const filtroCliente=filtroSel?.value||'';
+    const filtroCliente=_funilFiltroCliente;
 
     STAGE_SHORT.forEach((label,si)=>{
       const cards=propostas.filter(p=>Number(p.etapa)===si&&!p.arquivada&&(!filtroCliente||p.cliente===filtroCliente));
@@ -5127,7 +5126,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="sec-header">
       <div class="sec-title">Propostas por etapa — arraste para mover</div>
       <div class="action-group" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <select id="funil-filtro-cliente" onchange="renderKanban()" style="font-size:12px;padding:6px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;font-family:inherit;min-width:180px">
+        <select id="funil-filtro-cliente" onchange="_funilFiltroCliente=this.value;renderKanban()" style="font-size:12px;padding:6px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;font-family:inherit;min-width:180px">
           <option value="">Todos os clientes</option>
         </select>
         <button class="btn-export" onclick="exportCSV()">Exportar CSV</button>
