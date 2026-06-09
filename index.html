@@ -1131,6 +1131,7 @@
     if(name==='relatorio')window.renderRelatorio();
     if(name==='produtos')window.renderProdutos();
     if(name==='dashboard')window.renderDashboard();
+    if(name==='prospeccao')window.renderProspeccao();
   };
 
   window.openModal=(id)=>{
@@ -1435,6 +1436,303 @@
     document.getElementById('detalhe-hist-sub').textContent = (p.cliente||'') + (f.dataAgenda ? ' — ' + formatDateBR(f.dataAgenda) : '');
     document.getElementById('detalhe-hist-timeline').innerHTML = timelineHtml || '<div class="empty">Sem detalhes registrados.</div>';
     document.getElementById('modal-detalhe-hist').classList.add('open');
+  };
+
+  // ======== PROSPECÇÃO COMERCIAL ========
+  let prospeccoes = [];
+  let _unsubProsp = null;
+  let _prospFaseAtiva = {}; // postit-id -> fase index
+  let _prospEditFaseId = null;
+  let _prospEditFaseIdx = null;
+
+  const PROSP_FASES = [
+    {
+      label: 'Fase 1: Primeiro Contato',
+      icon: '📞',
+      fields: [
+        {id:'nomeContato', label:'Nome do contato', type:'text', placeholder:'Ex: João Silva'},
+        {id:'cargo', label:'Cargo', type:'text', placeholder:'Ex: Gerente de Compras'},
+        {id:'dataContato', label:'Data do contato', type:'date'},
+        {id:'proximaAcao', label:'Próxima ação', type:'text', placeholder:'Ex: Enviar apresentação'},
+      ]
+    },
+    {
+      label: 'Fase 2: Reunião Agendada',
+      icon: '📅',
+      fields: [
+        {id:'dataReuniao', label:'Data da reunião', type:'date'},
+        {id:'responsavelReuniao', label:'Responsável', type:'text', placeholder:'Nome do responsável'},
+        {id:'necessidade', label:'Necessidade identificada', type:'textarea', placeholder:'Descreva a necessidade do cliente...'},
+      ]
+    },
+    {
+      label: 'Fase 3: Proposta',
+      icon: '📋',
+      fields: [
+        {id:'dataEnvio', label:'Data de envio', type:'date'},
+        {id:'valorEstimado', label:'Valor estimado (R$)', type:'text', placeholder:'Ex: 50.000,00'},
+        {id:'prazoResposta', label:'Prazo de resposta', type:'date'},
+        {id:'obsProsposta', label:'Observações', type:'textarea', placeholder:'Detalhes da proposta...'},
+      ]
+    },
+    {
+      label: 'Fase 4: Negociação',
+      icon: '🤝',
+      fields: [
+        {id:'contrapropostas', label:'Contraproposta', type:'textarea', placeholder:'Descreva a contraproposta...'},
+        {id:'decisor', label:'Decisor', type:'text', placeholder:'Quem decide?'},
+        {id:'prazoDecisao', label:'Prazo de decisão', type:'date'},
+      ]
+    },
+    {
+      label: 'Fase 5: Fechamento',
+      icon: '✅',
+      fields: [
+        {id:'resultado', label:'Resultado', type:'select', options:['Ganho','Perdido','Em andamento']},
+        {id:'dataFechamento', label:'Data de fechamento', type:'date'},
+        {id:'motivoPerda', label:'Motivo (se perdido)', type:'textarea', placeholder:'Por que foi perdido?'},
+        {id:'obsFechamento', label:'Observações finais', type:'textarea', placeholder:''},
+      ]
+    }
+  ];
+
+  function initProspeccao() {
+    if (_unsubProsp) return;
+    _unsubProsp = onSnapshot(collection(db,'prospeccoes'), snap => {
+      prospeccoes = snap.docs.map(d=>({id:d.id,...d.data()}));
+      if(document.getElementById('panel-prospeccao')?.classList.contains('active'))
+        renderProspeccao();
+    });
+  }
+
+  window.renderProspeccao = function() {
+    initProspeccao();
+    const board = document.getElementById('prosp-board');
+    if (!board) return;
+
+    // Popular filtro responsável
+    const filtroResp = document.getElementById('prosp-filtro-resp');
+    if (filtroResp) {
+      const val = filtroResp.value;
+      filtroResp.innerHTML = '<option value="">Todos os responsáveis</option>' +
+        usuarios.map(u=>`<option value="${u.id}">${u.nome}</option>`).join('');
+      filtroResp.value = val;
+    }
+
+    let lista = [...prospeccoes];
+    const fStatus = document.getElementById('prosp-filtro-status')?.value||'';
+    const fResp = document.getElementById('prosp-filtro-resp')?.value||'';
+    if (fStatus) lista = lista.filter(p=>p.status===fStatus);
+    if (fResp)   lista = lista.filter(p=>p.responsavelId===fResp);
+
+    if (!lista.length) {
+      board.innerHTML = '<div class="prosp-board-empty">Nenhuma prospecção encontrada.<br><span style="font-size:12px">Clique em "+ Nova prospecção" para começar.</span></div>';
+      return;
+    }
+
+    board.innerHTML = lista.map(p => {
+      const faseAtiva = _prospFaseAtiva[p.id] ?? 0;
+      const faseTabs = PROSP_FASES.map((f,i) => {
+        const preenchida = temDadosFase(p, i);
+        return `<button class="prosp-fase-tab ${faseAtiva===i?'active':''}" onclick="setFaseAtiva('${p.id}',${i})">${f.icon}${preenchida?'✓':''}</button>`;
+      }).join('');
+      const faseBody = renderFaseBody(p, faseAtiva);
+      const statusLabels = {ativo:'Ativo',aguardando:'Aguardando',convertido:'Convertido'};
+      const acoes = (p.acoes||[]);
+      const acoesPend = acoes.filter(a=>!a.feita).length;
+      return `<div class="prosp-postit ${p.cor||''}">
+        <div class="prosp-postit-header">
+          <div class="prosp-postit-title">${p.empresa||'Sem nome'}</div>
+          <div class="prosp-postit-actions">
+            <span class="prosp-status-badge ${p.status||'ativo'}">${statusLabels[p.status||'ativo']}</span>
+            <button class="card-btn" onclick="editarProspeccao('${p.id}')" title="Editar">✎</button>
+            <button class="card-btn del" onclick="excluirProspeccao('${p.id}')" title="Apagar">✕</button>
+          </div>
+        </div>
+        ${p.responsavelNome?`<div class="prosp-postit-empresa">👤 ${p.responsavelNome}</div>`:''}
+        ${p.origem?`<div class="prosp-postit-empresa">🔗 ${p.origem}</div>`:''}
+        <div class="prosp-fase-tabs">${faseTabs}</div>
+        <div class="prosp-fase-body" id="fase-body-${p.id}">${faseBody}</div>
+        <div style="padding:0 16px 4px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:11px;color:#888">📋 Ações: ${acoes.length} ${acoesPend>0?`<span style="color:#e67e22;font-weight:700">(${acoesPend} pendente${acoesPend>1?'s':''})</span>`:''}</span>
+          <button class="btn-sm" style="font-size:11px;padding:4px 10px" onclick="abrirNovaAcaoProsp('${p.id}')">+ Ação</button>
+        </div>
+        ${renderAcoesProsp(p)}
+      </div>`;
+    }).join('');
+  };
+
+  function temDadosFase(p, idx) {
+    const fase = PROSP_FASES[idx];
+    return fase.fields.some(f => p['fase'+idx+'_'+f.id]);
+  }
+
+  function renderFaseBody(p, faseIdx) {
+    const fase = PROSP_FASES[faseIdx];
+    const html = fase.fields.map(f => {
+      const val = p['fase'+faseIdx+'_'+f.id]||'';
+      return `<div class="prosp-field">
+        <label>${f.label}</label>
+        <div class="pf-val ${val?'':'empty'}">${val||'—'}</div>
+      </div>`;
+    }).join('');
+    return `<div style="margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:11px;font-weight:700;color:#888">${fase.icon} ${fase.label}</span>
+      <button class="btn-sm" style="font-size:11px;padding:3px 9px" onclick="abrirEditarFase('${p.id}',${faseIdx})">✎ Editar</button>
+    </div>${html}`;
+  }
+
+  function renderAcoesProsp(p) {
+    const acoes = p.acoes||[];
+    if (!acoes.length) return '';
+    return `<div class="prosp-acoes-list">${acoes.map((a,i)=>`
+      <div class="prosp-acao-item ${a.feita?'done':''}">
+        <input type="checkbox" ${a.feita?'checked':''} onchange="toggleAcaoProsp('${p.id}',${i})">
+        <span>${a.texto}${a.data?` <em style="color:#aaa;font-size:10px">(${a.data})</em>`:''}</span>
+        ${a.responsavel?`<span style="font-size:10px;color:#6c63ff;margin-left:4px">👤${a.responsavel}</span>`:''}
+        <button class="prosp-acao-del" onclick="excluirAcaoProsp('${p.id}',${i})">✕</button>
+      </div>`).join('')}</div>`;
+  }
+
+  window.setFaseAtiva = (id, idx) => {
+    _prospFaseAtiva[id] = idx;
+    const p = prospeccoes.find(x=>x.id===id);
+    if (!p) return;
+    const body = document.getElementById('fase-body-'+id);
+    if (body) body.innerHTML = renderFaseBody(p, idx);
+    // update tab active states
+    const card = body?.closest('.prosp-postit');
+    if (card) {
+      card.querySelectorAll('.prosp-fase-tab').forEach((t,i)=>t.classList.toggle('active',i===idx));
+    }
+  };
+
+  window.abrirNovaProspeccao = () => {
+    document.getElementById('prosp-id').value = '';
+    document.getElementById('modal-prosp-title').textContent = 'Nova prospecção';
+    ['prosp-empresa','prosp-obs','prosp-origem'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('prosp-status').value = 'ativo';
+    document.getElementById('prosp-cor').value = '';
+    const sel = document.getElementById('prosp-responsavel');
+    sel.innerHTML = '<option value="">Selecione...</option>' + usuarios.map(u=>`<option value="${u.id}">${u.nome}</option>`).join('');
+    document.getElementById('modal-prospeccao').classList.add('open');
+  };
+
+  window.editarProspeccao = (id) => {
+    const p = prospeccoes.find(x=>x.id===id);
+    if (!p) return;
+    document.getElementById('prosp-id').value = id;
+    document.getElementById('modal-prosp-title').textContent = 'Editar prospecção';
+    document.getElementById('prosp-empresa').value = p.empresa||'';
+    document.getElementById('prosp-obs').value = p.obs||'';
+    document.getElementById('prosp-origem').value = p.origem||'';
+    document.getElementById('prosp-status').value = p.status||'ativo';
+    document.getElementById('prosp-cor').value = p.cor||'';
+    const sel = document.getElementById('prosp-responsavel');
+    sel.innerHTML = '<option value="">Selecione...</option>' + usuarios.map(u=>`<option value="${u.id}">${u.nome}</option>`).join('');
+    sel.value = p.responsavelId||'';
+    document.getElementById('modal-prospeccao').classList.add('open');
+  };
+
+  window.salvarProspeccao = async () => {
+    const empresa = document.getElementById('prosp-empresa').value.trim();
+    if (!empresa) { showToast('Preencha o nome da empresa/contato.'); return; }
+    const respId = document.getElementById('prosp-responsavel').value;
+    const respNome = respId ? (usuarios.find(u=>u.id===respId)?.nome||'') : '';
+    const dados = {
+      empresa,
+      obs: document.getElementById('prosp-obs').value,
+      origem: document.getElementById('prosp-origem').value,
+      status: document.getElementById('prosp-status').value,
+      cor: document.getElementById('prosp-cor').value,
+      responsavelId: respId,
+      responsavelNome: respNome,
+    };
+    const id = document.getElementById('prosp-id').value;
+    if (id) {
+      await updateDoc(doc(db,'prospeccoes',id), dados);
+      showToast('Prospecção atualizada!');
+    } else {
+      await addDoc(collection(db,'prospeccoes'), {...dados, acoes:[], criadoEm:serverTimestamp()});
+      showToast('Prospecção criada!');
+    }
+    closeModal('modal-prospeccao');
+  };
+
+  window.excluirProspeccao = async (id) => {
+    if (!confirm('Apagar esta prospecção permanentemente?')) return;
+    await deleteDoc(doc(db,'prospeccoes',id));
+    showToast('Prospecção removida.');
+  };
+
+  window.abrirEditarFase = (prospId, faseIdx) => {
+    _prospEditFaseId = prospId;
+    _prospEditFaseIdx = faseIdx;
+    const p = prospeccoes.find(x=>x.id===prospId);
+    const fase = PROSP_FASES[faseIdx];
+    document.getElementById('modal-fase-title').textContent = fase.icon+' '+fase.label;
+    const fields = document.getElementById('modal-fase-fields');
+    fields.innerHTML = fase.fields.map(f => {
+      const val = p?.['fase'+faseIdx+'_'+f.id]||'';
+      if (f.type==='textarea') return `<div class="fgf"><label class="fl">${f.label}</label><textarea id="fase-field-${f.id}" placeholder="${f.placeholder||''}" style="height:70px">${val}</textarea></div>`;
+      if (f.type==='select') return `<div><label class="fl">${f.label}</label><select id="fase-field-${f.id}" style="width:100%;box-sizing:border-box">${f.options.map(o=>`<option ${val===o?'selected':''}>${o}</option>`).join('')}</select></div>`;
+      return `<div><label class="fl">${f.label}</label><input id="fase-field-${f.id}" type="${f.type}" value="${val}" placeholder="${f.placeholder||''}" style="width:100%;box-sizing:border-box"></div>`;
+    }).join('');
+    document.getElementById('modal-prosp-fase').classList.add('open');
+  };
+
+  window.salvarFase = async () => {
+    if (!_prospEditFaseId) return;
+    const fase = PROSP_FASES[_prospEditFaseIdx];
+    const dados = {};
+    fase.fields.forEach(f => {
+      const el = document.getElementById('fase-field-'+f.id);
+      if (el) dados['fase'+_prospEditFaseIdx+'_'+f.id] = el.value;
+    });
+    await updateDoc(doc(db,'prospeccoes',_prospEditFaseId), dados);
+    showToast('Fase salva!');
+    closeModal('modal-prosp-fase');
+  };
+
+  window.abrirNovaAcaoProsp = (prospId) => {
+    document.getElementById('acao-prosp-id').value = prospId;
+    document.getElementById('acao-texto').value = '';
+    document.getElementById('acao-data').value = '';
+    const sel = document.getElementById('acao-responsavel');
+    sel.innerHTML = '<option value="">Selecione...</option>' + usuarios.map(u=>`<option value="${u.nome}">${u.nome}</option>`).join('');
+    document.getElementById('modal-prosp-acao').classList.add('open');
+  };
+
+  window.salvarAcaoProsp = async () => {
+    const texto = document.getElementById('acao-texto').value.trim();
+    if (!texto) { showToast('Preencha a descrição da ação.'); return; }
+    const id = document.getElementById('acao-prosp-id').value;
+    const p = prospeccoes.find(x=>x.id===id);
+    const acoes = [...(p?.acoes||[]), {
+      texto,
+      data: document.getElementById('acao-data').value,
+      responsavel: document.getElementById('acao-responsavel').value,
+      feita: false,
+      criadoEm: new Date().toLocaleDateString('pt-BR')
+    }];
+    await updateDoc(doc(db,'prospeccoes',id), {acoes});
+    showToast('Ação adicionada!');
+    closeModal('modal-prosp-acao');
+  };
+
+  window.toggleAcaoProsp = async (id, idx) => {
+    const p = prospeccoes.find(x=>x.id===id);
+    if (!p) return;
+    const acoes = [...(p.acoes||[])];
+    acoes[idx] = {...acoes[idx], feita: !acoes[idx].feita};
+    await updateDoc(doc(db,'prospeccoes',id), {acoes});
+  };
+
+  window.excluirAcaoProsp = async (id, idx) => {
+    const p = prospeccoes.find(x=>x.id===id);
+    if (!p) return;
+    const acoes = (p.acoes||[]).filter((_,i)=>i!==idx);
+    await updateDoc(doc(db,'prospeccoes',id), {acoes});
   };
 
   window.toggleAlertaArquivo = () => {
@@ -3884,6 +4182,41 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .card-btn.fu-btn:hover{color:var(--av-dark);background:var(--av-yellow-light)}
 .card-alert{font-size:9px;color:var(--av-amber);margin-top:3px}
 .card-followup{font-size:9px;color:var(--av-green);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prosp-board{display:flex;flex-wrap:wrap;gap:20px;padding:8px 0}
+.prosp-postit{background:#fffde7;border-radius:12px;box-shadow:3px 4px 16px rgba(0,0,0,.13),0 1px 3px rgba(0,0,0,.08);min-width:300px;max-width:340px;flex:0 0 300px;display:flex;flex-direction:column;border-top:6px solid #F5C400;position:relative;transition:box-shadow .2s}
+.prosp-postit:hover{box-shadow:4px 6px 22px rgba(0,0,0,.18)}
+.prosp-postit.color-blue{border-top-color:#4A90D9;background:#e8f4fd}
+.prosp-postit.color-green{border-top-color:#27ae60;background:#eafaf1}
+.prosp-postit.color-red{border-top-color:#e74c3c;background:#fdecea}
+.prosp-postit.color-purple{border-top-color:#8e44ad;background:#f5eef8}
+.prosp-postit-header{padding:14px 16px 8px;display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.prosp-postit-title{font-size:15px;font-weight:800;color:#1A1A18;line-height:1.3;flex:1}
+.prosp-postit-actions{display:flex;gap:4px;flex-shrink:0}
+.prosp-postit-empresa{font-size:12px;color:#666;padding:0 16px 8px;font-weight:500}
+.prosp-fase-tabs{display:flex;gap:4px;padding:0 12px 8px;flex-wrap:wrap}
+.prosp-fase-tab{font-size:11px;padding:4px 10px;border-radius:20px;border:1.5px solid #ddd;background:#fff;cursor:pointer;font-weight:600;color:#666;font-family:inherit;transition:all .15s}
+.prosp-fase-tab.active{background:#1A1A18;color:#F5C400;border-color:#1A1A18}
+.prosp-fase-body{padding:0 16px 12px;flex:1}
+.prosp-field{margin-bottom:8px}
+.prosp-field label{font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:2px}
+.prosp-field .pf-val{font-size:13px;color:#1A1A18;font-weight:500}
+.prosp-field .pf-val.empty{color:#bbb;font-style:italic}
+.prosp-add-acao{margin:8px 16px 14px;display:flex;gap:6px}
+.prosp-add-acao input{flex:1;font-size:12px;padding:6px 10px;border-radius:8px;border:1.5px solid #ddd;font-family:inherit;background:#fff}
+.prosp-acoes-list{padding:0 16px 8px}
+.prosp-acao-item{display:flex;align-items:center;gap:6px;font-size:12px;padding:5px 0;border-bottom:1px dashed #e8e4cc;color:#333}
+.prosp-acao-item:last-child{border-bottom:none}
+.prosp-acao-item input[type=checkbox]{accent-color:#F5C400;width:14px;height:14px;flex-shrink:0}
+.prosp-acao-item.done span{text-decoration:line-through;opacity:.5}
+.prosp-acao-del{background:none;border:none;cursor:pointer;color:#ccc;font-size:13px;padding:0 2px;margin-left:auto}
+.prosp-acao-del:hover{color:#e74c3c}
+.prosp-status-badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;background:#f0f0f0;color:#666}
+.prosp-status-badge.ativo{background:#e8f5e9;color:#27ae60}
+.prosp-status-badge.aguardando{background:#fff8e1;color:#f39c12}
+.prosp-status-badge.convertido{background:#e3f2fd;color:#1565c0}
+.prosp-board-empty{color:#aaa;font-size:14px;padding:40px;text-align:center}
+.prosp-header-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px}
+.prosp-filtros{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .alerts-list,.feedback-list{display:flex;flex-direction:column;gap:8px}
 .alert-card{background:#fff;border:1px solid #e8e7e0;border-radius:10px;padding:12px 14px;display:flex;align-items:flex-start;gap:10px}
 .aicon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px}
@@ -4682,6 +5015,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <button class="tab" onclick="showPanel('clientes',this)">Clientes</button>
     <button class="tab" onclick="showPanel('produtos',this)">Por produto</button>
     <button class="tab" onclick="showPanel('compradores',this)">Compradores</button>
+    <button class="tab" onclick="showPanel('prospeccao',this)">Prospecção</button>
     <button class="tab" id="tab-usuarios" onclick="showPanel('usuarios',this)" style="display:none">Usuários</button>
   </div>
   <div class="metrics">
@@ -4690,6 +5024,78 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="metric"><div class="mlabel">R$ Negociação</div><div class="mval amber" id="m-neg">R$ 0</div></div>
     <div class="metric"><div class="mlabel">Ganho mês (R$)</div><div class="mval green" id="m-ganho">R$ 0</div></div>
     <div class="metric"><div class="mlabel">Valor em aberto</div><div class="mval blue" id="m-valor">R$ 0</div></div>
+  </div>
+
+  <div id="panel-prospeccao" class="panel">
+    <div class="prosp-header-row">
+      <div class="sec-title">📌 Prospecção Comercial</div>
+      <div class="prosp-filtros">
+        <select id="prosp-filtro-status" onchange="renderProspeccao()" style="font-size:12px;padding:6px 10px;border-radius:8px;border:1px solid #ddd;background:#fff;font-family:inherit">
+          <option value="">Todos os status</option>
+          <option value="ativo">Ativo</option>
+          <option value="aguardando">Aguardando</option>
+          <option value="convertido">Convertido</option>
+        </select>
+        <select id="prosp-filtro-resp" onchange="renderProspeccao()" style="font-size:12px;padding:6px 10px;border-radius:8px;border:1px solid #ddd;background:#fff;font-family:inherit">
+          <option value="">Todos os responsáveis</option>
+        </select>
+        <button class="btn-new" onclick="abrirNovaProspeccao()">+ Nova prospecção</button>
+      </div>
+    </div>
+    <div class="prosp-board" id="prosp-board"></div>
+  </div>
+
+  <!-- Modal Nova/Editar Prospecção -->
+  <div class="modal-bg" id="modal-prospeccao">
+    <div class="modal" style="max-width:520px">
+      <div class="mh"><div class="mt" id="modal-prosp-title">Nova prospecção</div><button class="mc" onclick="closeModal('modal-prospeccao')">×</button></div>
+      <div class="fg">
+        <input type="hidden" id="prosp-id">
+        <div class="fgf"><label class="fl">Nome da empresa / contato *</label><input id="prosp-empresa" type="text" placeholder="Ex: Indústria XYZ"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div><label class="fl">Responsável</label><select id="prosp-responsavel" style="width:100%;box-sizing:border-box"><option value="">Selecione...</option></select></div>
+          <div><label class="fl">Status</label><select id="prosp-status" style="width:100%;box-sizing:border-box">
+            <option value="ativo">Ativo</option>
+            <option value="aguardando">Aguardando</option>
+            <option value="convertido">Convertido</option>
+          </select></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div><label class="fl">Cor do post-it</label><select id="prosp-cor" style="width:100%;box-sizing:border-box">
+            <option value="">Amarelo (padrão)</option>
+            <option value="color-blue">Azul</option>
+            <option value="color-green">Verde</option>
+            <option value="color-red">Vermelho</option>
+            <option value="color-purple">Roxo</option>
+          </select></div>
+          <div><label class="fl">Origem</label><input id="prosp-origem" type="text" placeholder="Ex: Indicação, LinkedIn..." style="width:100%;box-sizing:border-box"></div>
+        </div>
+        <div><label class="fl">Observação</label><textarea id="prosp-obs" placeholder="Informações gerais..." style="height:60px"></textarea></div>
+      </div>
+      <div class="mf"><button class="btn-cancel" onclick="closeModal('modal-prospeccao')">Cancelar</button><button class="btn-save" onclick="salvarProspeccao()">Salvar</button></div>
+    </div>
+  </div>
+
+  <!-- Modal Editar Fase -->
+  <div class="modal-bg" id="modal-prosp-fase">
+    <div class="modal" style="max-width:480px">
+      <div class="mh"><div class="mt" id="modal-fase-title">Editar fase</div><button class="mc" onclick="closeModal('modal-prosp-fase')">×</button></div>
+      <div class="fg" id="modal-fase-fields"></div>
+      <div class="mf"><button class="btn-cancel" onclick="closeModal('modal-prosp-fase')">Cancelar</button><button class="btn-save" onclick="salvarFase()">Salvar</button></div>
+    </div>
+  </div>
+
+  <div class="modal-bg" id="modal-prosp-acao">
+    <div class="modal" style="max-width:400px">
+      <div class="mh"><div class="mt">Nova ação</div><button class="mc" onclick="closeModal('modal-prosp-acao')">×</button></div>
+      <div class="fg">
+        <input type="hidden" id="acao-prosp-id">
+        <div class="fgf"><label class="fl">Descrição da ação *</label><input id="acao-texto" type="text" placeholder="Ex: Enviar proposta por email"></div>
+        <div><label class="fl">Data prevista</label><input id="acao-data" type="date" style="width:100%;box-sizing:border-box"></div>
+        <div><label class="fl">Responsável</label><select id="acao-responsavel" style="width:100%;box-sizing:border-box"><option value="">Selecione...</option></select></div>
+      </div>
+      <div class="mf"><button class="btn-cancel" onclick="closeModal('modal-prosp-acao')">Cancelar</button><button class="btn-save" onclick="salvarAcaoProsp()">Salvar</button></div>
+    </div>
   </div>
 
   <div id="panel-dashboard" class="panel active">
