@@ -643,19 +643,18 @@
     const board=document.getElementById('kanban-board');board.innerHTML='';
     const hoje=new Date().toISOString().split('T')[0];
 
-    // Popular filtro de clientes
+    // Popular filtro de clientes — salva valor ANTES de recriar o innerHTML
     const filtroSel=document.getElementById('funil-filtro-cliente');
+    const filtroCliente = filtroSel ? filtroSel.value : '';
     if(filtroSel){
-      // p.cliente guarda só o nome (ex: "Aché"), busca unidade para exibição
       const nomes=[...new Set(propostas.filter(p=>!p.arquivada&&p.cliente).map(p=>p.cliente))].sort();
       filtroSel.innerHTML='<option value="">Todos os clientes</option>'+nomes.map(n=>{
         const cl=clientes.find(x=>x.nome===n);
         const label=cl?.unidade?`${n} — ${cl.unidade}`:n;
         return `<option value="${n}">${label}</option>`;
       }).join('');
-      if(_funilFiltroCliente) filtroSel.value=_funilFiltroCliente;
+      if(filtroCliente) filtroSel.value=filtroCliente;
     }
-    const filtroCliente=_funilFiltroCliente;
 
     STAGE_SHORT.forEach((label,si)=>{
       const cards=propostas.filter(p=>Number(p.etapa)===si&&!p.arquivada&&(!filtroCliente||p.cliente===filtroCliente));
@@ -5122,7 +5121,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="sec-header">
       <div class="sec-title">Propostas por etapa — arraste para mover</div>
       <div class="action-group" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <select id="funil-filtro-cliente" onchange="_funilFiltroCliente=this.value;renderKanban()" style="font-size:12px;padding:6px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;font-family:inherit;min-width:180px">
+        <select id="funil-filtro-cliente" onchange="renderKanban()" style="font-size:12px;padding:6px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;font-family:inherit;min-width:180px">
           <option value="">Todos os clientes</option>
         </select>
         <button class="btn-export" onclick="exportCSV()">Exportar CSV</button>
