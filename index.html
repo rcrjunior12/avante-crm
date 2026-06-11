@@ -621,12 +621,19 @@
     const negVal = propostasAtivas.filter(p=>Number(p.etapa)===5)
       .reduce((a,p)=>a+getUltimoValor(p),0);
 
-    // Ganho do mês atual -> usa dataGanho (campo registrado na movimentação)
+    // Ganho do mês atual -> usa dataGanho ou mesGanho como fallback
+    const mesAtualKey = `${anoAtual}-${String(mesAtual+1).padStart(2,'0')}`;
     const ganhoMesVal = propostas.filter(p=>{ if(p.arquivada) return false;
       if(Number(p.etapa)!==6) return false;
-      if(!p.dataGanho) return false;
-      const d = parseDateBR(p.dataGanho);
-      return d.getMonth()===mesAtual && d.getFullYear()===anoAtual;
+      // Tenta dataGanho primeiro
+      if(p.dataGanho){
+        const d = parseDateBR(p.dataGanho);
+        if(d && !isNaN(d)) return d.getMonth()===mesAtual && d.getFullYear()===anoAtual;
+      }
+      // Fallback: usa mesGanho (formato YYYY-MM)
+      if(p.mesGanho) return p.mesGanho === mesAtualKey;
+      // Sem nenhum campo de data: considera do mês atual se não arquivada
+      return true;
     }).reduce((a,p)=>a+getUltimoValor(p),0);
 
     // Valor em aberto = soma das propostas ativas (etapa 0-5)
@@ -870,10 +877,11 @@
     const todasPerdidas= propostas.filter(p=>Number(p.etapa)===7);
 
     // Current month only: non-archived (still in active funil this month)
+    const mesAtualKeyDash=`${anoDash}-${String(mesDash+1).padStart(2,'0')}`;
     const ganhasMesAtualArr = todasGanhas.filter(p=>{
-      if(!p.dataGanho) return false;
-      const d = parseDateBR(p.dataGanho);
-      return d.getMonth()===mesDash && d.getFullYear()===anoDash;
+      if(p.dataGanho){const d=parseDateBR(p.dataGanho);if(d&&!isNaN(d))return d.getMonth()===mesDash&&d.getFullYear()===anoDash;}
+      if(p.mesGanho) return p.mesGanho===mesAtualKeyDash;
+      return true;
     });
     const ganhoMesAtual  = ganhasMesAtualArr.reduce((a,p)=>a+getUltValorDash(p),0);
     const ganhasMesAtual = ganhasMesAtualArr.length;
@@ -978,11 +986,12 @@
     };
     // Only count non-archived proposals (arquivada means past month, already counted there)
     // Deleted proposals are gone from propostas[] automatically
+    const mesKeyRel=`${ano}-${String(mes+1).padStart(2,'0')}`;
     const ganhoMes=propostas.filter(p=>{
       if(Number(p.etapa)!==6||p.arquivada) return false;
-      if(!p.dataGanho) return false;
-      const d=parseDateBR(p.dataGanho);
-      return d.getMonth()===mes&&d.getFullYear()===ano;
+      if(p.dataGanho){const d=parseDateBR(p.dataGanho);if(d&&!isNaN(d))return d.getMonth()===mes&&d.getFullYear()===ano;}
+      if(p.mesGanho) return p.mesGanho===mesKeyRel;
+      return true;
     }).reduce((a,p)=>a+getUltValorRel(p),0);
     const perdidoMes=propostas.filter(p=>{
       if(Number(p.etapa)!==7||p.arquivada) return false;
