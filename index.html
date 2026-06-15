@@ -638,9 +638,12 @@
 
     // Valor em aberto = soma das propostas ativas (etapa 0-5)
     const va = propostasAtivas.reduce((a,p)=>a+getUltimoValor(p),0);
+    const quentesVal = propostasAtivas.filter(p=>Number(p.etapa)===0)
+      .reduce((a,p)=>a+getUltimoValor(p),0);
     document.getElementById('m-total').textContent=total;
     document.getElementById('m-feed').textContent='R$ '+feedVal.toLocaleString('pt-BR');
     document.getElementById('m-neg').textContent='R$ '+negVal.toLocaleString('pt-BR');
+    document.getElementById('m-quentes').textContent='R$ '+quentesVal.toLocaleString('pt-BR');
     document.getElementById('m-ganho').textContent='R$ '+ganhoMesVal.toLocaleString('pt-BR');
     document.getElementById('m-valor').textContent='R$ '+va.toLocaleString('pt-BR');
   }
@@ -5047,6 +5050,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="metric"><div class="mlabel">Total propostas</div><div class="mval blue" id="m-total">0</div></div>
     <div class="metric"><div class="mlabel">R$ Acompanhamento</div><div class="mval amber" id="m-feed">R$ 0</div></div>
     <div class="metric"><div class="mlabel">R$ Negociação</div><div class="mval amber" id="m-neg">R$ 0</div></div>
+    <div class="metric" style="border-color:#e74c3c"><div class="mlabel" style="color:#e74c3c">🔥 Prop. Quentes (R$)</div><div class="mval" style="color:#e74c3c" id="m-quentes">R$ 0</div></div>
     <div class="metric"><div class="mlabel">Ganho mês (R$)</div><div class="mval green" id="m-ganho">R$ 0</div></div>
     <div class="metric"><div class="mlabel">Valor em aberto</div><div class="mval blue" id="m-valor">R$ 0</div></div>
   </div>
