@@ -31,8 +31,8 @@
   const STAGES = ['Propostas Quentes','Levantamento técnico','Elaboração do escopo','Precificação','Acompanhamento','Negociação','Fechado / Ganho','Perdido'];
   const STAGE_SHORT = ['🔥 Prop. Quentes','Levantamento','Elab. Escopo','Precificação','Acompanhamento','Negociação','Ganho','Perdido'];
   const DOTS = ['#e74c3c','#F5C400','#7F77DD','#EF9F27','#5DCAA5','#D4537E','#639922','#E24B4A'];
-  const TIPOS_PRODUTO = ['Serviços de Automação','Painel Elétrico','Serviço de Instalação Elétrica'];
-  const CORES_PRODUTO = {'Serviços de Automação':'#7F77DD','Painel Elétrico':'#378ADD','Serviço de Instalação Elétrica':'#EF9F27'};
+  const TIPOS_PRODUTO = ['Serviços de Automação','Painel Elétrico','Serviço de Instalação Elétrica','Materiais Elétrico/Automação'];
+  const CORES_PRODUTO = {'Serviços de Automação':'#7F77DD','Painel Elétrico':'#378ADD','Serviço de Instalação Elétrica':'#EF9F27','Materiais Elétrico/Automação':'#27ae60'};
 
   let propostas=[], alertas=[], feedbacks=[], clientes=[], usuarios=[], compradores=[], centrosCusto=[], fornecedores=[];
   let _funilFiltroCliente = '';
@@ -1060,7 +1060,7 @@
     const prodBars=TIPOS_PRODUTO.map((tipo,i)=>{
       const h=Math.round((prodCounts[i]/maxP)*chartH)||2;
       const x=i*(pBarW+pGap),y=pTopPad+(chartH-h);const cor=CORES_PRODUTO[tipo];
-      const label=tipo==='Serviço de Instalação Elétrica'?'Inst. Elétrica':tipo==='Serviços de Automação'?'Automação':'Painel Elét.';
+      const label=tipo==='Materiais Elétrico/Automação'?'Mat. Elétrico':tipo==='Serviço de Instalação Elétrica'?'Inst. Elétrica':tipo==='Serviços de Automação'?'Automação':'Painel Elét.';
       const valLabel=prodValores[i]>0?'R$ '+Number(Math.round(prodValores[i])).toLocaleString('pt-BR'):'';
       return `<g>
         <rect x="${x}" y="${y}" width="${pBarW}" height="${h}" fill="${cor}" rx="4"/>
@@ -1122,7 +1122,7 @@
       const lista=propostas.filter(p=>Array.isArray(p.produtos)?p.produtos.includes(tipo):p.produto===tipo);
       const valor=lista.reduce((a,p)=>a+(p.valor||0),0);
       const cor=CORES_PRODUTO[tipo];
-      const icones={'Serviços de Automação':'⚙','Painel Elétrico':'⚡','Serviço de Instalação Elétrica':'🔌'};
+      const icones={'Serviços de Automação':'⚙','Painel Elétrico':'⚡','Serviço de Instalação Elétrica':'🔌','Materiais Elétrico/Automação':'🔧'};
       html+=`<div class="prod-block"><div class="prod-header" style="border-left:4px solid ${cor}">
         <div style="display:flex;align-items:center;gap:10px"><div class="prod-icon" style="background:${cor}20;color:${cor}">${icones[tipo]}</div><div><div class="prod-name">${tipo}</div><div class="prod-count">${lista.length} proposta${lista.length!==1?'s':''}</div></div></div>
         <div class="prod-valor">R$ ${valor.toLocaleString('pt-BR')}</div>
@@ -5393,6 +5393,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           <label class="prod-check-item"><input type="checkbox" class="prod-check" value="Serviços de Automação"> Serviços de Automação</label>
           <label class="prod-check-item"><input type="checkbox" class="prod-check" value="Painel Elétrico"> Painel Elétrico</label>
           <label class="prod-check-item"><input type="checkbox" class="prod-check" value="Serviço de Instalação Elétrica"> Serviço de Instalação Elétrica</label>
+          <label class="prod-check-item"><input type="checkbox" class="prod-check" value="Materiais Elétrico/Automação"> Materiais Elétrico/Automação</label>
         </div>
       </div>
       <div id="f-contatos-wrap" style="display:none">
