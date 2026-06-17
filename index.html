@@ -877,13 +877,14 @@
     const abertas = propostas.filter(p=>Number(p.etapa)<6 && !p.arquivada);
 
     // ALL ganhas/perdidas (including archived - for historical totals)
-    // These represent real completed deals regardless of archive state
     const todasGanhas  = propostas.filter(p=>Number(p.etapa)===6);
     const todasPerdidas= propostas.filter(p=>Number(p.etapa)===7);
 
-    // Current month only: non-archived (still in active funil this month)
+    // Ganho mês atual — mesma lógica do Funil (sem arquivadas, usa mesGanho como fallback)
     const mesAtualKeyDash=`${anoDash}-${String(mesDash+1).padStart(2,'0')}`;
-    const ganhasMesAtualArr = todasGanhas.filter(p=>{
+    const ganhasMesAtualArr = propostas.filter(p=>{
+      if(p.arquivada) return false;
+      if(Number(p.etapa)!==6) return false;
       if(p.dataGanho){const d=parseDateBR(p.dataGanho);if(d&&!isNaN(d))return d.getMonth()===mesDash&&d.getFullYear()===anoDash;}
       if(p.mesGanho) return p.mesGanho===mesAtualKeyDash;
       return true;
